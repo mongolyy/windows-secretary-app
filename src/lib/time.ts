@@ -1,4 +1,4 @@
-/** Timezone helpers. Zoneless Notion times are interpreted in the configured zone (default Asia/Tokyo). */
+/** タイムゾーンの補助。ゾーンのない Notion の時刻は、設定したゾーン（初期値は Asia/Tokyo）で読む。 */
 
 export type ZonedParts = {
   year: number;
@@ -7,7 +7,7 @@ export type ZonedParts = {
   hour: number;
   minute: number;
   second: number;
-  /** en-US short weekday: Sun, Mon, ... */
+  /** en-US の短い曜日名。Sun, Mon など。 */
   weekday: string;
 };
 
@@ -51,7 +51,7 @@ export function zonedParts(ms: number, timeZone: string): ZonedParts {
   let month = Number(get("month"));
   let day = Number(get("day"));
   let hour = Number(get("hour"));
-  // Some ICU builds report midnight as 24:00 on the previous calendar math.
+  // ICU によっては深夜を、前日の計算のまま 24:00 と返す。
   if (hour === 24) {
     hour = 0;
     const next = addCalendarDays(year, month, day, 1);
@@ -74,7 +74,7 @@ export function weekdayJa(weekdayEn: string): string {
   return WEEKDAY_JA[weekdayEn] ?? "";
 }
 
-/** Minutes east of UTC at an absolute instant. Tokyo in winter and summer is 540. */
+/** ある瞬間の、UTC から東へ何分か。東京は通年 540。 */
 export function offsetMinutesAt(timeZone: string, instant: number): number {
   const parts = zonedParts(instant, timeZone);
   const asUtc = Date.UTC(
@@ -88,7 +88,7 @@ export function offsetMinutesAt(timeZone: string, instant: number): number {
   return Math.round((asUtc - instant) / 60_000);
 }
 
-/** Convert a wall-clock time in `timeZone` to a UTC epoch. */
+/** `timeZone` の壁時計を UTC のエポックミリ秒にする。 */
 export function wallTimeToUtcMs(
   year: number,
   month: number,

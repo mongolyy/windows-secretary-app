@@ -1,7 +1,7 @@
 [package]
 name = "secretary"
 version = "0.1.0"
-description = "Compact offline schedule window for a Notion CSV export"
+description = "Notion の CSV 書き出しを手元で読む、常時表示の予定ウィンドウ"
 authors = ["secretary"]
 edition = "2021"
 rust-version = "1.90"

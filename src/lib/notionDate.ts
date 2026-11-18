@@ -15,7 +15,7 @@ type Side = {
   hour: number | null;
   minute: number | null;
   second: number | null;
-  /** Minutes east of UTC. Null means "use the configured time zone". */
+  /** UTC から東へ何分か。null は設定したタイムゾーンを使う。 */
   offsetMinutes: number | null;
   timeOnly: boolean;
 };
@@ -50,12 +50,12 @@ const MONTHS: Record<string, number> = {
 const RANGE_SPLIT = /\s*(?:→|⇒|->|–|—)\s*/;
 
 /**
- * Parse one Notion date cell.
+ * Notion の日付セルを1つ解釈する。
  *
- * Timed end is exclusive (`start <= now < end`). All-day end dates are inclusive,
- * matching the last day Notion shows, and are stored as the next local midnight.
- * A time with no zone uses `timeZone` (the app default is Asia/Tokyo).
- * A single timed value with no end is treated as one hour long.
+ * 時刻指定の終了は含まない（`start <= now < end`）。終日の終了日は、Notion が表示する
+ * 最後の日を含む。内部ではその翌日のローカル 0:00 として持つ。
+ * ゾーンのない時刻は `timeZone`（アプリの初期値は Asia/Tokyo）で読む。
+ * 終了のない時刻1つは、1時間の予定にする。
  */
 export function parseNotionDateRange(raw: string, timeZone: string): DateParse {
   const text = normalizeDateText(raw);

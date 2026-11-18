@@ -22,11 +22,11 @@ export type ScheduleParse =
 export type ScheduleView = {
   timeZone: string;
   allDay: ScheduleEvent[];
-  /** Timed event in progress, if any. */
+  /** 進行中の時刻指定の予定。なければ null。 */
   current: ScheduleEvent | null;
-  /** All-day event to feature when nothing timed is in progress. */
+  /** 時刻指定の進行中がないとき、主表示にする終日予定。 */
   heroAllDay: ScheduleEvent | null;
-  /** All-day events still running, excluding the hero when it is already featured. */
+  /** まだ続いている終日予定。主表示に出したものは除く。 */
   allDayStrip: ScheduleEvent[];
   next: ScheduleEvent | null;
   laterToday: ScheduleEvent[];
@@ -154,8 +154,8 @@ export function isStale(
 }
 
 /**
- * An all-day event is not "next" when a timed event starts during it.
- * Otherwise a holiday at midnight would hide the meeting on that same day.
+ * 終日予定の期間中に時刻指定の予定が始まるなら、その終日は「次」にしない。
+ * そうしないと、深夜 0 時の終日が同じ日の会議を隠す。
  */
 function skipAllDayAsNext(event: ScheduleEvent, events: ScheduleEvent[]): boolean {
   if (!event.allDay) return false;

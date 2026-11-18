@@ -1,4 +1,4 @@
-/** RFC 4180-style CSV. Notion wraps fields that contain commas or newlines in double quotes. */
+/** RFC 4180 に沿った CSV。Notion はカンマや改行を含むセルを二重引用符で囲む。 */
 
 export type CsvTable =
   | { ok: true; rows: string[][] }

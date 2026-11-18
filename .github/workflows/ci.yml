@@ -22,14 +22,14 @@ jobs:
         with:
           workspaces: src-tauri -> target
 
-      - name: Install npm dependencies
+      - name: npm の依存関係を入れる
         run: npm ci
 
-      - name: Unit tests
+      - name: 単体テスト
         run: npm test
 
-      - name: Rust tests
+      - name: Rust のテスト
         run: cargo test --manifest-path src-tauri/Cargo.toml
 
-      - name: Build the Windows app
+      - name: Windows アプリをビルドする
         run: npm run tauri build

@@ -1,4 +1,4 @@
-/** A schedule row after the CSV and Notion date cell have been parsed. */
+/** CSV と Notion の日付セルを解釈したあとの予定1件。 */
 export type ScheduleEvent = {
   id: string;
   title: string;
@@ -11,7 +11,7 @@ export type ScheduleEvent = {
 };
 
 export type ParseIssue = {
-  /** CSV record number, 1-based. Null for file-level problems. */
+  /** CSV のレコード番号（1始まり）。ファイル全体の問題では null。 */
   rowNumber: number | null;
   code: string;
   message: string;
