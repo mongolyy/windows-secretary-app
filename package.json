@@ -1,0 +1,27 @@
+{
+  "name": "secretary",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Notionから書き出したCSVを手元で読む、常時表示の予定ウィンドウ",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.12.5",
+    "@tauri-apps/plugin-dialog": "^2.8.4",
+    "@tauri-apps/plugin-opener": "^2.7.3"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.12.5",
+    "typescript": "^5.9.3",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.1"
+  }
+}
