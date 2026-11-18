@@ -4,14 +4,29 @@ import {
   fetchSettings,
   getPreviewKind,
   isDesktop,
+  listenForNotificationActions,
+  listenForNotifyWake,
   listenForScheduleChanges,
+  loadNotified,
   minimizeWindow,
   openExternal,
   pickScheduleFile,
+  saveNotified,
   saveSettings,
+  scheduleNotifyWake,
   setPreviewKind,
+  showMainWindow,
+  showMeetingNotification,
   type PreviewKind,
 } from "./lib/api";
+import {
+  MAX_NOTIFY_LEAD_MINUTES,
+  MIN_NOTIFY_LEAD_MINUTES,
+  notificationCopy,
+  planNotifications,
+  rememberFired,
+  type FiredNotice,
+} from "./lib/notify";
 import { isValidTimeZone } from "./lib/time";
 import { buildScheduleView, isStale, parseScheduleCsv, type ParsedSchedule } from "./lib/schedule";
 import type { ParseIssue, SchedulePayload, SettingsDto } from "./lib/types";
@@ -27,6 +42,9 @@ const view: HTMLElement = viewRoot;
 const dialog: HTMLDialogElement = dialogRoot;
 
 let settings: SettingsDto | null = null;
+let firedLog: FiredNotice[] | null = null;
+let notifying = false;
+let scheduledFor: number | null | undefined;
 let payload: SchedulePayload | null = null;
 let schedule: ParsedSchedule | null = null;
 let issues: ParseIssue[] = [];
@@ -53,12 +71,31 @@ async function boot(): Promise<void> {
     });
   }
   wireSettings();
+  try {
+    await listenForNotificationActions(
+      (url) => {
+        void openExternal(url);
+      },
+      () => {
+        void showMainWindow();
+      },
+    );
+  } catch {
+    // 通知のボタンを登録できなくても、予定の表示は続ける。
+  }
+  await listenForNotifyWake(() => {
+    void syncNotifications(Date.now());
+  });
   settings = await fetchSettings();
+  firedLog = await loadNotified();
   await listenForScheduleChanges(() => {
     void reload();
   });
   await reload();
-  window.setInterval(() => tick(false), 1000);
+  window.setInterval(() => {
+    tick(false);
+    void syncNotifications(Date.now());
+  }, 1000);
   window.setInterval(() => {
     void reload();
   }, 20_000);
@@ -78,6 +115,7 @@ async function reload(): Promise<void> {
     };
     schedule = null;
     tick(true);
+    await syncNotifications(Date.now());
     return;
   }
 
@@ -119,6 +157,7 @@ async function reload(): Promise<void> {
     statusKind = "unreadable";
   }
   tick(true);
+  await syncNotifications(Date.now());
 }
 
 function tick(force: boolean): void {
@@ -218,6 +257,10 @@ function openSettings(): void {
   setInput("stale-minutes", String(settings.staleThresholdMinutes));
   setChecked("always-on-top", settings.alwaysOnTop);
   setChecked("close-to-tray", settings.closeToTray);
+  setChecked("launch-at-login", settings.launchAtLogin);
+  setChecked("notify-enabled", settings.notifyEnabled);
+  setInput("notify-lead", String(settings.notifyLeadMinutes));
+  syncNotifyInputs();
   const envNote = document.querySelector("#env-note");
   if (envNote instanceof HTMLElement) {
     envNote.hidden = !settings.pathOverriddenByEnv;
@@ -244,6 +287,7 @@ function openSettings(): void {
 
 function wireSettings(): void {
   document.querySelector("#auto-detect")?.addEventListener("change", syncColumnInputs);
+  document.querySelector("#notify-enabled")?.addEventListener("change", syncNotifyInputs);
   document.querySelector("#pick-file")?.addEventListener("click", () => {
     void (async () => {
       const picked = await pickScheduleFile();
@@ -284,6 +328,15 @@ async function submitSettings(): Promise<void> {
     setFormError("タイムゾーンを解釈できません。");
     return;
   }
+  const notifyLead = Number(inputValue("notify-lead"));
+  if (
+    !Number.isInteger(notifyLead) ||
+    notifyLead < MIN_NOTIFY_LEAD_MINUTES ||
+    notifyLead > MAX_NOTIFY_LEAD_MINUTES
+  ) {
+    setFormError("通知は 1 分前から 180 分前にしてください。");
+    return;
+  }
   const next: SettingsDto = {
     ...settings,
     schedulePath,
@@ -299,6 +352,9 @@ async function submitSettings(): Promise<void> {
     staleThresholdMinutes: stale,
     alwaysOnTop: checked("always-on-top"),
     closeToTray: checked("close-to-tray"),
+    launchAtLogin: checked("launch-at-login"),
+    notifyEnabled: checked("notify-enabled"),
+    notifyLeadMinutes: notifyLead,
   };
   try {
     settings = await saveSettings(next);
@@ -310,6 +366,64 @@ async function submitSettings(): Promise<void> {
   lastGood = null;
   renderedKey = "";
   await reload();
+}
+
+function syncNotifyInputs(): void {
+  const field = document.querySelector("#notify-lead");
+  if (field instanceof HTMLInputElement) field.disabled = !checked("notify-enabled");
+}
+
+async function syncNotifications(nowMs: number): Promise<void> {
+  if (notifying || firedLog == null || settings == null) return;
+  notifying = true;
+  try {
+    const events = statusKind === "ready" && schedule ? schedule.events : [];
+    const prefs = {
+      enabled: settings.notifyEnabled,
+      leadMinutes: settings.notifyLeadMinutes,
+    };
+    const plan = planNotifications(events, nowMs, prefs, firedLog);
+    if (plan.due.length > 0) {
+      const shown = [];
+      for (const item of plan.due) {
+        const copy = notificationCopy(item.event, nowMs, settings.timeZone);
+        const ok = await showMeetingNotification({
+          title: copy.title,
+          body: copy.body,
+          url: item.event.url,
+        });
+        if (ok) shown.push(item);
+      }
+      if (shown.length > 0 && firedLog) {
+        firedLog = rememberFired(firedLog, shown, nowMs);
+        try {
+          await saveNotified(firedLog);
+        } catch {
+          // この起動中はメモリの記録で同じ予定を繰り返さない。
+        }
+      }
+    }
+    if (firedLog == null || settings == null) return;
+    const next = planNotifications(
+      statusKind === "ready" && schedule ? schedule.events : [],
+      Date.now(),
+      {
+        enabled: settings.notifyEnabled,
+        leadMinutes: settings.notifyLeadMinutes,
+      },
+      firedLog,
+    ).nextFireAtMs;
+    if (next !== scheduledFor) {
+      scheduledFor = next;
+      try {
+        await scheduleNotifyWake(next);
+      } catch {
+        scheduledFor = undefined;
+      }
+    }
+  } finally {
+    notifying = false;
+  }
 }
 
 function syncColumnInputs(): void {

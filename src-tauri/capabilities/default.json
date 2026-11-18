@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "秘書ウィンドウがファイル選択、リンクを開く、ウィンドウ操作に使える権限",
+  "description": "秘書ウィンドウがファイル選択、リンクを開く、デスクトップ通知、ウィンドウ操作に使える権限",
   "windows": ["main"],
   "permissions": [
     "core:default",
@@ -14,6 +14,7 @@
     "core:window:allow-set-always-on-top",
     "core:window:allow-start-dragging",
     "opener:default",
-    "dialog:allow-open"
+    "dialog:allow-open",
+    "notification:default"
   ]
 }

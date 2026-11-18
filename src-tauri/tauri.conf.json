@@ -26,6 +26,7 @@
         "transparent": false,
         "shadow": true,
         "center": true,
+        "visible": false,
         "visibleOnAllWorkspaces": true,
         "backgroundColor": "#efe6d6"
       }

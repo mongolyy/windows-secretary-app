@@ -1,13 +1,16 @@
+mod autostart;
 mod files;
+mod notified;
 mod settings;
 mod watch;
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
+use std::time::Duration;
 
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Manager, State, WindowEvent};
+use tauri::{AppHandle, Emitter, Manager, State, WindowEvent};
 
 use files::SchedulePayload;
 use settings::{Settings, SettingsDto};
@@ -16,6 +19,8 @@ pub struct AppState {
     pub settings: Mutex<Settings>,
     pub watcher: Mutex<Option<watch::WatcherHandle>>,
     pub exiting: AtomicBool,
+    /// 通知の起床を取り消し、次の開始時刻へ差し替えるための番号。
+    pub notify_generation: AtomicU64,
 }
 
 #[tauri::command]
@@ -34,13 +39,30 @@ fn set_settings(
     incoming: Settings,
 ) -> Result<SettingsDto, String> {
     let clean = settings::validate(incoming)?;
+    let previous = {
+        let guard = state
+            .settings
+            .lock()
+            .map_err(|_| "設定を読めません".to_string())?;
+        guard.clone()
+    };
     settings::save_settings(&clean)?;
     {
         let mut guard = state
             .settings
             .lock()
             .map_err(|_| "設定を更新できません".to_string())?;
-        *guard = clean;
+        *guard = clean.clone();
+    }
+    if clean.launch_at_login != previous.launch_at_login {
+        if let Err(err) = autostart::apply_launch_at_login(clean.launch_at_login) {
+            // ログイン項目を書けなかったときは、ほかの変更も戻して画面とファイルを揃える。
+            let _ = settings::save_settings(&previous);
+            if let Ok(mut guard) = state.settings.lock() {
+                *guard = previous;
+            }
+            return Err(err);
+        }
     }
     let dto = {
         let guard = state
@@ -64,30 +86,72 @@ fn load_schedule(app: AppHandle, state: State<AppState>) -> Result<SchedulePaylo
     Ok(files::read_schedule_at(&settings.effective_path()))
 }
 
+#[tauri::command]
+fn load_notified() -> Vec<notified::FiredNotice> {
+    notified::load_notified()
+}
+
+#[tauri::command]
+fn save_notified(records: Vec<notified::FiredNotice>) -> Result<(), String> {
+    notified::save_notified(&records)
+}
+
+/// 非表示のあいだは画面のタイマーが遅れることがある。
+/// 次に知らせる時刻までこちらで待ち、その時刻に画面へ起こす。
+#[tauri::command]
+fn schedule_notify_wake(app: AppHandle, state: State<AppState>, at_ms: Option<i64>) {
+    let generation = state.notify_generation.fetch_add(1, Ordering::SeqCst) + 1;
+    let Some(at_ms) = at_ms else {
+        return;
+    };
+    std::thread::spawn(move || {
+        if !wait_until_notify(&app, generation, at_ms) {
+            return;
+        }
+        let _ = app.emit("notification-due", ());
+    });
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let settings = settings::load_settings();
     let always_on_top = settings.always_on_top;
+    let launch_at_login = settings.launch_at_login;
     tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            show_main(app);
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            // ログイン起動が既存のプロセスへ合流したときは、トレイのままにする。
+            if !autostart::launched_in_tray(&args) {
+                show_main(app);
+            }
         }))
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
         .manage(AppState {
             settings: Mutex::new(settings),
             watcher: Mutex::new(None),
             exiting: AtomicBool::new(false),
+            notify_generation: AtomicU64::new(0),
         })
         .invoke_handler(tauri::generate_handler![
             get_settings,
             set_settings,
-            load_schedule
+            load_schedule,
+            load_notified,
+            save_notified,
+            schedule_notify_wake
         ])
         .setup(move |app| {
             apply_always_on_top(app.handle(), always_on_top);
             setup_tray(app.handle())?;
             watch::restart_watcher(app.handle());
+            if let Err(err) = autostart::apply_launch_at_login(launch_at_login) {
+                eprintln!("自動起動の同期に失敗しました: {err}");
+            }
+            // 通常の起動はここで表示する。ログイン時は --minimized のままトレイに残す。
+            if !autostart::launched_in_tray(&std::env::args().collect::<Vec<_>>()) {
+                show_main(app.handle());
+            }
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -172,6 +236,37 @@ fn apply_always_on_top(app: &AppHandle, always_on_top: bool) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.set_always_on_top(always_on_top);
     }
+}
+
+/// 予定の書き直しで世代が変わったら、待っているスレッドは何もせず終わる。
+fn wait_until_notify(app: &AppHandle, generation: u64, at_ms: i64) -> bool {
+    loop {
+        let state = app.state::<AppState>();
+        if state.exiting.load(Ordering::SeqCst) {
+            return false;
+        }
+        if state.notify_generation.load(Ordering::SeqCst) != generation {
+            return false;
+        }
+        let now = unix_now_ms();
+        if now >= at_ms {
+            return app
+                .state::<AppState>()
+                .notify_generation
+                .load(Ordering::SeqCst)
+                == generation;
+        }
+        let slice = ((at_ms - now) as u64).min(30_000).max(1);
+        std::thread::sleep(Duration::from_millis(slice));
+    }
+}
+
+fn unix_now_ms() -> i64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as i64)
+        .unwrap_or(0)
 }
 
 fn show_main(app: &AppHandle) {
