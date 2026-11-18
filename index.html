@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>秘書</title>
+    <link rel="icon" href="/favicon.png" />
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <div id="view"></div>
+    <dialog id="settings-dialog">
+      <form id="settings-form">
+        <header class="dialog-head">
+          <h2>設定</h2>
+          <p>NotionのCSVを、このPCの中だけで読みます。</p>
+        </header>
+        <label class="field">
+          <span>予定ファイル</span>
+          <span class="path-row">
+            <input id="schedule-path" type="text" spellcheck="false" autocomplete="off" />
+            <button id="pick-file" type="button">参照…</button>
+          </span>
+        </label>
+        <p id="env-note" class="hint" hidden></p>
+        <label class="check">
+          <input id="auto-detect" type="checkbox" />
+          <span>列名を自動で判定する</span>
+        </label>
+        <p id="detected" class="hint"></p>
+        <button id="lock-columns" type="button" class="text-btn">この判定を固定</button>
+        <div class="columns">
+          <label>タイトル列 <input id="col-title" type="text" autocomplete="off" /></label>
+          <label>日時列 <input id="col-date" type="text" autocomplete="off" /></label>
+          <label>終了列 <input id="col-end" type="text" autocomplete="off" placeholder="空なら日時列の期間" /></label>
+          <label>場所列 <input id="col-location" type="text" autocomplete="off" placeholder="空なら使わない" /></label>
+          <label>URL列 <input id="col-url" type="text" autocomplete="off" placeholder="空なら使わない" /></label>
+        </div>
+        <label class="field">
+          <span>タイムゾーン（時刻にゾーンがないとき）</span>
+          <select id="time-zone">
+            <option value="Asia/Tokyo">日本時間（Asia/Tokyo）</option>
+            <option value="Asia/Seoul">韓国時間（Asia/Seoul）</option>
+            <option value="Asia/Shanghai">中国時間（Asia/Shanghai）</option>
+            <option value="Asia/Singapore">シンガポール（Asia/Singapore）</option>
+            <option value="UTC">UTC</option>
+            <option value="Europe/London">英国（Europe/London）</option>
+            <option value="America/New_York">米国東部（America/New_York）</option>
+            <option value="America/Los_Angeles">米国太平洋（America/Los_Angeles）</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>この時間より古い書き出しを警告（分）</span>
+          <input id="stale-minutes" type="number" min="5" max="20160" step="1" />
+        </label>
+        <label class="check">
+          <input id="always-on-top" type="checkbox" />
+          <span>常に手前に表示</span>
+        </label>
+        <label class="check">
+          <input id="close-to-tray" type="checkbox" />
+          <span>閉じるときはトレイにしまう</span>
+        </label>
+        <p id="settings-error" class="form-error" hidden></p>
+        <footer class="dialog-actions">
+          <button id="settings-cancel" type="button">キャンセル</button>
+          <button id="settings-save" type="submit">保存</button>
+        </footer>
+      </form>
+    </dialog>
+    <div id="preview-bar" hidden>
+      <span>開発用プレビュー</span>
+      <button type="button" data-preview="ja">日本語CSV</button>
+      <button type="button" data-preview="en">英語CSV</button>
+      <button type="button" data-preview="missing">ファイルなし</button>
+      <button type="button" data-preview="broken">壊れたCSV</button>
+      <button type="button" data-preview="stale">古い更新</button>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
