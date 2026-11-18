@@ -131,12 +131,7 @@ function resolveManual(
   return { ok: true, roles: rolesFromIndexes(headers, title, date, end, location, url) };
 }
 
-function requireHeader(
-  headers: string[],
-  name: string,
-  label: string,
-  issues: ParseIssue[],
-): number | null {
+function requireHeader(headers: string[], name: string, label: string, issues: ParseIssue[]): number | null {
   if (!name.trim()) {
     issues.push({
       rowNumber: 1,
@@ -223,12 +218,7 @@ function firstUnused(headers: string[], used: Set<number>): number {
   return headers.findIndex((_, index) => !used.has(index));
 }
 
-function sniffDateColumn(
-  headers: string[],
-  dataRows: string[][],
-  timeZone: string,
-  used: Set<number>,
-): number {
+function sniffDateColumn(headers: string[], dataRows: string[][], timeZone: string, used: Set<number>): number {
   let best = -1;
   let bestRatio = 0;
   headers.forEach((_, index) => {
@@ -265,9 +255,9 @@ function rolesFromIndexes(
     headers: {
       title: headers[title] ?? "",
       date: headers[date] ?? "",
-      end: end == null ? null : headers[end] ?? "",
-      location: location == null ? null : headers[location] ?? "",
-      url: url == null ? null : headers[url] ?? "",
+      end: end == null ? null : (headers[end] ?? ""),
+      location: location == null ? null : (headers[location] ?? ""),
+      url: url == null ? null : (headers[url] ?? ""),
     },
   };
 }

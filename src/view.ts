@@ -166,19 +166,15 @@ function eventCard(
   handlers: ViewHandlers,
 ): HTMLElement {
   const card = el("article", role === "next" ? "card next" : "card");
-  const kicker =
-    role === "current" ? "進行中" : role === "allday" ? "終日" : "次の予定";
+  const kicker = role === "current" ? "進行中" : role === "allday" ? "終日" : "次の予定";
   card.append(el("p", "kicker", kicker));
   card.append(el("h2", undefined, event.title));
   card.append(
-    el(
-      "p",
-      "when",
-      formatEventWhen(event.startMs, event.endMs, event.allDay, model.nowMs, model.view.timeZone),
-    ),
+    el("p", "when", formatEventWhen(event.startMs, event.endMs, event.allDay, model.nowMs, model.view.timeZone)),
   );
 
-  const seconds = role === "current" ? model.view.currentRemainingSec : role === "next" ? model.view.nextRemainingSec : null;
+  const seconds =
+    role === "current" ? model.view.currentRemainingSec : role === "next" ? model.view.nextRemainingSec : null;
   const block = el("div", "countdown-block");
   if (role === "allday" || seconds == null) {
     const big = el("p", "countdown", "終日");
@@ -214,11 +210,7 @@ function allDayStrip(event: ScheduleEvent, model: ReadyModel): HTMLElement {
   const text = el("div");
   text.append(
     el("strong", undefined, event.title),
-    el(
-      "div",
-      "where",
-      formatEventWhen(event.startMs, event.endMs, true, model.nowMs, model.view.timeZone),
-    ),
+    el("div", "where", formatEventWhen(event.startMs, event.endMs, true, model.nowMs, model.view.timeZone)),
   );
   strip.append(text);
   return strip;
@@ -245,11 +237,7 @@ function renderFooter(model: ScreenModel, handlers: ViewHandlers): HTMLElement {
   const settings = el<HTMLButtonElement>("button", "text-btn", "設定");
   settings.type = "button";
   settings.addEventListener("click", handlers.onSettings);
-  const clock = el(
-    "span",
-    undefined,
-    model.kind === "ready" ? formatNow(model.nowMs, model.view.timeZone) : "",
-  );
+  const clock = el("span", undefined, model.kind === "ready" ? formatNow(model.nowMs, model.view.timeZone) : "");
   clock.id = "now-clock";
   footer.append(settings, clock);
   return footer;

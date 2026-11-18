@@ -45,8 +45,7 @@ export function zonedParts(ms: number, timeZone: string): ZonedParts {
     weekday: "short",
   });
   const parts = dtf.formatToParts(new Date(ms));
-  const get = (type: Intl.DateTimeFormatPartTypes) =>
-    parts.find((part) => part.type === type)?.value ?? "";
+  const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
   let year = Number(get("year"));
   let month = Number(get("month"));
   let day = Number(get("day"));
@@ -77,14 +76,7 @@ export function weekdayJa(weekdayEn: string): string {
 /** ある瞬間の、UTC から東へ何分か。東京は通年 540。 */
 export function offsetMinutesAt(timeZone: string, instant: number): number {
   const parts = zonedParts(instant, timeZone);
-  const asUtc = Date.UTC(
-    parts.year,
-    parts.month - 1,
-    parts.day,
-    parts.hour,
-    parts.minute,
-    parts.second,
-  );
+  const asUtc = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second);
   return Math.round((asUtc - instant) / 60_000);
 }
 
@@ -131,17 +123,10 @@ export function isValidYmd(year: number, month: number, day: number): boolean {
     return false;
   }
   const probe = new Date(Date.UTC(year, month - 1, day));
-  return (
-    probe.getUTCFullYear() === year &&
-    probe.getUTCMonth() === month - 1 &&
-    probe.getUTCDate() === day
-  );
+  return probe.getUTCFullYear() === year && probe.getUTCMonth() === month - 1 && probe.getUTCDate() === day;
 }
 
-export function zonedDayBounds(
-  nowMs: number,
-  timeZone: string,
-): { startMs: number; endMs: number } {
+export function zonedDayBounds(nowMs: number, timeZone: string): { startMs: number; endMs: number } {
   const parts = zonedParts(nowMs, timeZone);
   const startMs = wallTimeToUtcMs(parts.year, parts.month, parts.day, 0, 0, 0, timeZone);
   const next = addCalendarDays(parts.year, parts.month, parts.day, 1);

@@ -1,8 +1,6 @@
 /** RFC 4180 に沿った CSV。Notion はカンマや改行を含むセルを二重引用符で囲む。 */
 
-export type CsvTable =
-  | { ok: true; rows: string[][] }
-  | { ok: false; message: string };
+export type CsvTable = { ok: true; rows: string[][] } | { ok: false; message: string };
 
 export function parseCsv(input: string): CsvTable {
   const text = input.replace(/^\uFEFF/, "");

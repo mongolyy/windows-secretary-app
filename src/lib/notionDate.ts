@@ -1,12 +1,6 @@
-import {
-  addCalendarDays,
-  isValidYmd,
-  wallTimeToUtcMs,
-} from "./time";
+import { addCalendarDays, isValidYmd, wallTimeToUtcMs } from "./time";
 
-export type DateParse =
-  | { ok: true; startMs: number; endMs: number; allDay: boolean }
-  | { ok: false; message: string };
+export type DateParse = { ok: true; startMs: number; endMs: number; allDay: boolean } | { ok: false; message: string };
 
 type Side = {
   year: number;
@@ -67,7 +61,7 @@ export function parseNotionDateRange(raw: string, timeZone: string): DateParse {
 
   const start = parseSide(parts[0]);
   if (!start) return fail("日付の形式を解釈できません");
-  let end = parts.length === 2 ? parseSide(parts[1]) : null;
+  const end = parts.length === 2 ? parseSide(parts[1]) : null;
   if (parts.length === 2 && !end) return fail("終了側の日付を解釈できません");
 
   if (start.timeOnly) return fail("日付がありません");
@@ -101,18 +95,13 @@ export function parseNotionDateRange(raw: string, timeZone: string): DateParse {
     const startMs = midnightMs(start, timeZone);
     const endBase = end ?? start;
     const nextDay = addCalendarDays(endBase.year, endBase.month, endBase.day, 1);
-    const endMs = midnightMs(
-      { ...endBase, year: nextDay.year, month: nextDay.month, day: nextDay.day },
-      timeZone,
-    );
+    const endMs = midnightMs({ ...endBase, year: nextDay.year, month: nextDay.month, day: nextDay.day }, timeZone);
     if (endMs <= startMs) return fail("終了が開始以前です");
     return { ok: true, startMs, endMs, allDay: true };
   }
 
   const startMs = instantMs(start, timeZone);
-  const endMs = end
-    ? instantMs(end, timeZone)
-    : startMs + 60 * 60 * 1000;
+  const endMs = end ? instantMs(end, timeZone) : startMs + 60 * 60 * 1000;
   if (end && !endWasTimeOnly && endMs <= startMs) return fail("終了が開始以前です");
   if (endMs <= startMs) return fail("終了が開始以前です");
   return { ok: true, startMs, endMs, allDay: false };
@@ -145,8 +134,7 @@ function instantMs(side: Side, timeZone: string): number {
   const minute = side.minute ?? 0;
   const second = side.second ?? 0;
   if (side.offsetMinutes != null) {
-    return Date.UTC(side.year, side.month - 1, side.day, hour, minute, second) -
-      side.offsetMinutes * 60_000;
+    return Date.UTC(side.year, side.month - 1, side.day, hour, minute, second) - side.offsetMinutes * 60_000;
   }
   return wallTimeToUtcMs(side.year, side.month, side.day, hour, minute, second, timeZone);
 }
@@ -177,9 +165,7 @@ function parseSide(input: string): Side | null {
 }
 
 function extractOffset(input: string): { rest: string; offsetMinutes: number | null } {
-  const match = input.match(
-    /^(.*?)(?:\s*[(（]\s*(GMT|UTC|JST)\s*([+-]\s*\d{1,2}(?::\d{2})?)?\s*[)）])\s*$/i,
-  );
+  const match = input.match(/^(.*?)(?:\s*[(（]\s*(GMT|UTC|JST)\s*([+-]\s*\d{1,2}(?::\d{2})?)?\s*[)）])\s*$/i);
   if (!match) return { rest: input.trim(), offsetMinutes: null };
   const kind = match[2].toUpperCase();
   const rawOffset = match[3];
@@ -211,10 +197,7 @@ function stripWeekday(input: string): string {
       /\s*[(（]\s*(?:(?:月|火|水|木|金|土|日)曜?日?|monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun)\s*[)）]/gi,
       "",
     )
-    .replace(
-      /^(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun)\s*,\s*/i,
-      "",
-    )
+    .replace(/^(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun)\s*,\s*/i, "")
     .trim();
 }
 
@@ -248,9 +231,7 @@ function parseClock(
 }
 
 function parseTimeOnly(text: string): Pick<Side, "hour" | "minute" | "second"> | null {
-  const match = text.match(
-    /^(午前|午後)?\s*(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM|午前|午後)?$/i,
-  );
+  const match = text.match(/^(午前|午後)?\s*(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM|午前|午後)?$/i);
   if (!match) return null;
   const clock = parseClock(match[1], match[2], match[3], match[4], match[5]);
   if (!clock) return null;
@@ -293,20 +274,9 @@ function parseEnglish(text: string, offsetMinutes: number | null): Side | null {
 function parseIso(text: string, offsetMinutes: number | null): Side | null {
   const dateOnly = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (dateOnly) {
-    return side(
-      Number(dateOnly[1]),
-      Number(dateOnly[2]),
-      Number(dateOnly[3]),
-      null,
-      null,
-      null,
-      offsetMinutes,
-      false,
-    );
+    return side(Number(dateOnly[1]), Number(dateOnly[2]), Number(dateOnly[3]), null, null, null, offsetMinutes, false);
   }
-  const match = text.match(
-    /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?(Z|[+-]\d{2}:\d{2})?$/i,
-  );
+  const match = text.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?(Z|[+-]\d{2}:\d{2})?$/i);
   if (!match) return null;
   const hour = Number(match[4]);
   const minute = Number(match[5]);
@@ -325,36 +295,16 @@ function parseIso(text: string, offsetMinutes: number | null): Side | null {
 }
 
 function parseSlash(text: string, offsetMinutes: number | null): Side | null {
-  const match = text.match(
-    /^(\d{4})\/(\d{1,2})\/(\d{1,2})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/,
-  );
+  const match = text.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
   if (!match) return null;
   if (!match[4]) {
-    return side(
-      Number(match[1]),
-      Number(match[2]),
-      Number(match[3]),
-      null,
-      null,
-      null,
-      offsetMinutes,
-      false,
-    );
+    return side(Number(match[1]), Number(match[2]), Number(match[3]), null, null, null, offsetMinutes, false);
   }
   const hour = Number(match[4]);
   const minute = Number(match[5]);
   const second = match[6] ? Number(match[6]) : 0;
   if (hour > 23 || minute > 59 || second > 59) return null;
-  return side(
-    Number(match[1]),
-    Number(match[2]),
-    Number(match[3]),
-    hour,
-    minute,
-    second,
-    offsetMinutes,
-    false,
-  );
+  return side(Number(match[1]), Number(match[2]), Number(match[3]), hour, minute, second, offsetMinutes, false);
 }
 
 function side(

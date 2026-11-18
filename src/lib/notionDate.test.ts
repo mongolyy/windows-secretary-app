@@ -7,11 +7,7 @@ function utc(iso: string): number {
   return Date.parse(iso);
 }
 
-function expectRange(
-  raw: string,
-  expected: { start: string; end: string; allDay: boolean },
-  timeZone = TZ,
-) {
+function expectRange(raw: string, expected: { start: string; end: string; allDay: boolean }, timeZone = TZ) {
   const parsed = parseNotionDateRange(raw, timeZone);
   expect(parsed.ok, parsed.ok ? "" : parsed.message).toBe(true);
   if (!parsed.ok) return;

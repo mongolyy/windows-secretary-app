@@ -86,15 +86,7 @@ function dayWord(ms: number, nowMs: number, timeZone: string): string | null {
   const tomorrowMs = wallTimeToUtcMs(tomorrow.year, tomorrow.month, tomorrow.day, 12, 0, 0, timeZone);
   if (sameYmd(ms, tomorrowMs, timeZone)) return "明日";
   const yesterday = addCalendarDays(today.year, today.month, today.day, -1);
-  const yesterdayMs = wallTimeToUtcMs(
-    yesterday.year,
-    yesterday.month,
-    yesterday.day,
-    12,
-    0,
-    0,
-    timeZone,
-  );
+  const yesterdayMs = wallTimeToUtcMs(yesterday.year, yesterday.month, yesterday.day, 12, 0, 0, timeZone);
   if (sameYmd(ms, yesterdayMs, timeZone)) return "昨日";
   return null;
 }

@@ -1,0 +1,77 @@
+# vX.Y.Z 形式のタグを push すると、Windows の NSIS インストーラをビルドし、
+# 同じタグの GitHub Release を下書きとして作って添付する。
+# 下書きなのは、インストーラが未署名で、公開前に人がファイルを確認するため。
+# このファイルが含まれるコミットにタグを打ったときだけ動く。
+
+name: リリース
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  nsis:
+    name: NSIS を Release の下書きに添付する
+    runs-on: windows-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: タグとアプリのバージョンが一致するか確認する
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: node scripts/version.mjs check
+
+      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+
+      - uses: swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: src-tauri -> target
+
+      - name: npm の依存関係を入れる
+        run: npm ci
+
+      - name: Windows の NSIS インストーラをビルドする
+        run: npm run tauri build -- --bundles nsis
+
+      - name: インストーラのファイル名を確認する
+        run: ls -la src-tauri/target/release/bundle/nsis
+
+      - name: Release の下書きへインストーラを添付する
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+        with:
+          draft: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          name: 秘書 ${{ github.ref_name }}
+          fail_on_unmatched_files: true
+          files: src-tauri/target/release/bundle/nsis/*-setup.exe
+          body: |
+            タグ ${{ github.ref_name }} から作った下書きです。添付ファイルを確認してから Publish release で公開してください。公開するまで、利用者向けの最新版にはなりません。
+
+            ## インストール
+
+            1. 添付の `Secretary_*_x64-setup.exe` をダウンロードします。
+            2. このインストーラはコード署名していません。SmartScreen が「Windows によって PC が保護されました」と出したら、「詳細情報」を開いて「実行」を押します。
+            3. 現在のユーザー向けに入ります。管理者権限は要りません。
+            4. WebView2 が無い PC では、インストーラが初回だけ WebView2 をダウンロードします。そのときだけネットワークが要ります。
+
+            予定の CSV は `%USERPROFILE%\secretary\schedule.csv` に置きます。

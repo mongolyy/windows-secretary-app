@@ -2,12 +2,7 @@ import { parseCsv } from "./csv";
 import { resolveColumns } from "./mapping";
 import { parseNotionDateRange } from "./notionDate";
 import { zonedDayBounds } from "./time";
-import type {
-  ColumnSettings,
-  ParseIssue,
-  ResolvedHeaders,
-  ScheduleEvent,
-} from "./types";
+import type { ColumnSettings, ParseIssue, ResolvedHeaders, ScheduleEvent } from "./types";
 
 export type ParsedSchedule = {
   events: ScheduleEvent[];
@@ -15,9 +10,7 @@ export type ParsedSchedule = {
   headers: ResolvedHeaders;
 };
 
-export type ScheduleParse =
-  | { ok: true; schedule: ParsedSchedule }
-  | { ok: false; issues: ParseIssue[] };
+export type ScheduleParse = { ok: true; schedule: ParsedSchedule } | { ok: false; issues: ParseIssue[] };
 
 export type ScheduleView = {
   timeZone: string;
@@ -36,10 +29,7 @@ export type ScheduleView = {
 
 const MAX_WARNINGS = 50;
 
-export function parseScheduleCsv(
-  text: string,
-  options: { timeZone: string; columns: ColumnSettings },
-): ScheduleParse {
+export function parseScheduleCsv(text: string, options: { timeZone: string; columns: ColumnSettings }): ScheduleParse {
   if (!text.trim()) {
     return fail([{ rowNumber: null, code: "empty", message: "CSVが空です" }]);
   }
@@ -88,11 +78,7 @@ export function parseScheduleCsv(
   };
 }
 
-export function buildScheduleView(
-  events: ScheduleEvent[],
-  nowMs: number,
-  timeZone: string,
-): ScheduleView {
+export function buildScheduleView(events: ScheduleEvent[], nowMs: number, timeZone: string): ScheduleView {
   const inProgress = events
     .filter((event) => !event.allDay && event.startMs <= nowMs && nowMs < event.endMs)
     .sort((a, b) => a.endMs - b.endMs || a.startMs - b.startMs || a.rowNumber - b.rowNumber);
@@ -101,14 +87,13 @@ export function buildScheduleView(
   const allDay = events
     .filter((event) => event.allDay && event.startMs <= nowMs && nowMs < event.endMs)
     .sort((a, b) => a.startMs - b.startMs || a.rowNumber - b.rowNumber);
-  const heroAllDay = current ? null : allDay[0] ?? null;
+  const heroAllDay = current ? null : (allDay[0] ?? null);
   const allDayStrip = current ? allDay : allDay.slice(1);
 
   const next =
     events
       .filter((event) => event.startMs > nowMs && !skipAllDayAsNext(event, events))
-      .sort((a, b) => a.startMs - b.startMs || a.endMs - b.endMs || a.rowNumber - b.rowNumber)[0] ??
-    null;
+      .sort((a, b) => a.startMs - b.startMs || a.endMs - b.endMs || a.rowNumber - b.rowNumber)[0] ?? null;
 
   const day = zonedDayBounds(nowMs, timeZone);
   const featured = new Set<string>();
@@ -144,11 +129,7 @@ export function remainingSeconds(targetMs: number, nowMs: number): number {
   return Math.max(0, Math.floor((targetMs - nowMs) / 1000));
 }
 
-export function isStale(
-  mtimeMs: number | null,
-  nowMs: number,
-  thresholdMinutes: number,
-): boolean {
+export function isStale(mtimeMs: number | null, nowMs: number, thresholdMinutes: number): boolean {
   if (mtimeMs == null) return false;
   return nowMs - mtimeMs > thresholdMinutes * 60_000;
 }
@@ -159,10 +140,7 @@ export function isStale(
  */
 function skipAllDayAsNext(event: ScheduleEvent, events: ScheduleEvent[]): boolean {
   if (!event.allDay) return false;
-  return events.some(
-    (other) =>
-      !other.allDay && other.startMs >= event.startMs && other.startMs < event.endMs,
-  );
+  return events.some((other) => !other.allDay && other.startMs >= event.startMs && other.startMs < event.endMs);
 }
 
 function buildEvent(
