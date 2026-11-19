@@ -245,6 +245,26 @@ test("同じバージョンへの set は成功する", () => {
   }
 });
 
+test("validate は SemVer だけを受け、ファイルは変えない", () => {
+  const root = writeFixture();
+  try {
+    const before = readFileSync(join(root, "package.json"), "utf8");
+    for (const version of ["0.1.0", "0.2.0-rc.1", "0.0.0-test.1"]) {
+      const result = run(["validate", version], root);
+      assert.equal(result.status, 0, result.stderr);
+      assert.match(result.stdout, new RegExp(`バージョン ${version.replaceAll(".", "\\.")} は SemVer です`));
+    }
+    for (const version of ["v0.1.0", "01.2.3", "0.2", "0.2.0+build", ""]) {
+      const result = version === "" ? run(["validate"], root) : run(["validate", version], root);
+      assert.equal(result.status, 1, version);
+      assert.match(result.stderr, version === "" ? /指定してください/ : /SemVer ではありません/);
+    }
+    assert.equal(readFileSync(join(root, "package.json"), "utf8"), before);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("未知のコマンドと余分な引数は拒否する", () => {
   const root = writeFixture();
   try {

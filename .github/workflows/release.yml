@@ -1,7 +1,8 @@
-# vX.Y.Z 形式のタグを push すると、Windows の NSIS インストーラをビルドし、
-# 同じタグの GitHub Release を下書きとして作って添付する。
-# 下書きなのは、インストーラが未署名で、公開前に人がファイルを確認するため。
-# このファイルが含まれるコミットにタグを打ったときだけ動く。
+# タグの push、または「バージョンを指定してリリースする」からの workflow_call で、
+# Windows の NSIS インストーラとポータブル版をビルドし、同じタグの GitHub Release の下書きに添付する。
+# GITHUB_TOKEN で作ったタグは push トリガーを起動しない。そのときは呼び出し側が workflow_call でこのファイルを直接使う。
+# 人がタグを push したときは、この on.push.tags が動く。
+# 下書きなのは、公開前に人がファイルを確認するため。証明書の Secrets が無いビルドは未署名。
 
 name: リリース
 
@@ -9,24 +10,45 @@ on:
   push:
     tags:
       - "v*"
+  workflow_call:
+    inputs:
+      tag:
+        description: リリースタグ（v で始まる SemVer）
+        required: true
+        type: string
+      ref:
+        description: ビルドするコミット SHA
+        required: true
+        type: string
+    secrets:
+      WINDOWS_CERTIFICATE:
+        required: false
+      WINDOWS_CERTIFICATE_PASSWORD:
+        required: false
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ inputs.tag || github.ref }}
   cancel-in-progress: false
 
 jobs:
-  nsis:
-    name: NSIS を Release の下書きに添付する
+  release:
+    name: インストーラとポータブル版を下書きに添付する
     runs-on: windows-latest
     timeout-minutes: 90
     defaults:
       run:
         shell: bash
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || github.sha }}
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -34,8 +56,6 @@ jobs:
           cache: npm
 
       - name: タグとアプリのバージョンが一致するか確認する
-        env:
-          RELEASE_TAG: ${{ github.ref_name }}
         run: node scripts/version.mjs check
 
       - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master
@@ -50,28 +70,131 @@ jobs:
       - name: npm の依存関係を入れる
         run: npm ci
 
+      - name: コード署名の有無を決める
+        id: sign
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "$WINDOWS_CERTIFICATE" ] && [ -z "$WINDOWS_CERTIFICATE_PASSWORD" ]; then
+            echo "コード署名の Secrets（WINDOWS_CERTIFICATE と WINDOWS_CERTIFICATE_PASSWORD）が設定されていないため、署名をスキップします。成果物は未署名です。"
+            echo "::notice::コード署名の Secrets が無いので、署名をスキップします。成果物は未署名です。"
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ -z "$WINDOWS_CERTIFICATE" ] || [ -z "$WINDOWS_CERTIFICATE_PASSWORD" ]; then
+            echo "署名用の Secret が片方だけです。WINDOWS_CERTIFICATE と WINDOWS_CERTIFICATE_PASSWORD は、両方設定するか、両方空にしてください。"
+            exit 1
+          fi
+          umask 077
+          export PFX_PATH="$RUNNER_TEMP/certificate.pfx"
+          node --input-type=module <<'NODE'
+          import { writeFileSync } from "node:fs";
+          const raw = (process.env.WINDOWS_CERTIFICATE ?? "").replace(/\s/g, "");
+          const bytes = Buffer.from(raw, "base64");
+          if (bytes.length < 32 || bytes[0] !== 0x30) {
+            console.error("証明書を復号できませんでした。WINDOWS_CERTIFICATE は .pfx を base64 した文字列です。");
+            process.exit(1);
+          }
+          writeFileSync(process.env.PFX_PATH, bytes);
+          NODE
+          echo "証明書の Secret があるので、インストーラと exe にコード署名します。"
+          echo "::notice::証明書の Secret があるので、コード署名してビルドします。"
+          echo "enabled=true" >> "$GITHUB_OUTPUT"
+          echo "WINDOWS_PFX=$PFX_PATH" >> "$GITHUB_ENV"
+
+      - name: 署名設定を書く
+        if: steps.sign.outputs.enabled == 'true'
+        run: node scripts/sign-config.mjs "$GITHUB_WORKSPACE/scripts/sign-windows.ps1" "$RUNNER_TEMP/tauri.sign.json"
+
       - name: Windows の NSIS インストーラをビルドする
-        run: npm run tauri build -- --bundles nsis
+        env:
+          SIGN_ENABLED: ${{ steps.sign.outputs.enabled }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ "$SIGN_ENABLED" = "true" ]; then
+            npm run tauri build -- --bundles nsis --config "$RUNNER_TEMP/tauri.sign.json"
+          else
+            npm run tauri build -- --bundles nsis
+          fi
 
-      - name: インストーラのファイル名を確認する
-        run: ls -la src-tauri/target/release/bundle/nsis
+      - name: ビルド成果物を表示する
+        run: |
+          ls -la src-tauri/target/release/*.exe
+          ls -la src-tauri/target/release/bundle/nsis
 
-      - name: Release の下書きへインストーラを添付する
+      - name: ポータブル版とチェックサムを作る
+        run: |
+          set -euo pipefail
+          node scripts/collect-release-assets.mjs \
+            --exe src-tauri/target/release/secretary.exe \
+            --setup-dir src-tauri/target/release/bundle/nsis \
+            --out release-assets \
+            --tag "$RELEASE_TAG"
+          node scripts/release-smoke.mjs release-assets
+
+      - name: 来歴を付けられるリポジトリか確認する
+        id: attest-gate
+        env:
+          OWNER_TYPE: ${{ github.event.repository.owner.type }}
+          VISIBILITY: ${{ github.event.repository.visibility }}
+        run: |
+          set -euo pipefail
+          if [ "$OWNER_TYPE" = "User" ] && [ "$VISIBILITY" = "private" ]; then
+            echo "個人アカウントの非公開リポジトリでは、GitHub がビルド来歴を保存できません。来歴の記録をスキップします。組織のリポジトリ、または公開リポジトリでは記録します。"
+            echo "::notice::個人アカウントの非公開リポジトリのため、ビルド来歴の記録をスキップします。"
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "このリポジトリではビルド来歴を記録します。"
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: ビルド来歴を記録する
+        if: steps.attest-gate.outputs.enabled == 'true'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: release-assets/*
+
+      - name: リリース本文を書く
+        env:
+          SIGN_ENABLED: ${{ steps.sign.outputs.enabled }}
+          ATTEST_ENABLED: ${{ steps.attest-gate.outputs.enabled }}
+          BODY_PATH: ${{ runner.temp }}/release-body.md
+        run: node scripts/release-body.mjs
+
+      - name: Release の下書きへ添付する
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          target_commitish: ${{ inputs.ref || github.sha }}
           draft: true
-          prerelease: ${{ contains(github.ref_name, '-') }}
-          name: 秘書 ${{ github.ref_name }}
+          prerelease: ${{ contains(inputs.tag || github.ref_name, '-') }}
+          make_latest: "false"
+          name: 秘書 ${{ inputs.tag || github.ref_name }}
+          generate_release_notes: true
+          body_path: ${{ runner.temp }}/release-body.md
           fail_on_unmatched_files: true
-          files: src-tauri/target/release/bundle/nsis/*-setup.exe
-          body: |
-            タグ ${{ github.ref_name }} から作った下書きです。添付ファイルを確認してから Publish release で公開してください。公開するまで、利用者向けの最新版にはなりません。
+          files: release-assets/*
 
-            ## インストール
+      - name: 下書きの添付を確認する
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5; do
+            if gh release view "$RELEASE_TAG" --json tagName,isDraft,isPrerelease,assets > "$RUNNER_TEMP/release.json"; then
+              break
+            fi
+            if [ "$attempt" -eq 5 ]; then
+              echo "下書き Release を読めませんでした。"
+              exit 1
+            fi
+            sleep 5
+          done
+          node scripts/release-remote-smoke.mjs "$RUNNER_TEMP/release.json" release-assets
 
-            1. 添付の `Secretary_*_x64-setup.exe` をダウンロードします。
-            2. このインストーラはコード署名していません。SmartScreen が「Windows によって PC が保護されました」と出したら、「詳細情報」を開いて「実行」を押します。
-            3. 現在のユーザー向けに入ります。管理者権限は要りません。
-            4. WebView2 が無い PC では、インストーラが初回だけ WebView2 をダウンロードします。そのときだけネットワークが要ります。
-
-            予定の CSV は `%USERPROFILE%\secretary\schedule.csv` に置きます。
+      - name: 証明書ファイルを消す
+        if: always()
+        run: rm -f "$RUNNER_TEMP/certificate.pfx"
