@@ -180,7 +180,7 @@ jobs:
       # POST /repos/.../releases が 403（Resource not accessible by integration）になった。
       # 同じトークンで下書きを作れていたこのアクションに戻す。
       - name: Release の下書きへ添付する
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # zizmor: ignore[superfluous-actions] gh release create は contents: write でも POST /releases が 403 になった。v2.6.2
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # zizmor: ignore[superfluous-actions] gh release create は contents: write でも POST /releases が 403 になった。v3.0.4
         with:
           tag_name: ${{ inputs.tag || github.ref_name }}
           target_commitish: ${{ inputs.ref || github.sha }}
