@@ -319,8 +319,10 @@ mod tests {
 
     #[test]
     fn rejects_a_short_stale_threshold() {
-        let mut settings = Settings::default();
-        settings.stale_threshold_minutes = 1;
+        let settings = Settings {
+            stale_threshold_minutes: 1,
+            ..Default::default()
+        };
         assert!(validate(settings).is_err());
     }
 
@@ -347,11 +349,15 @@ mod tests {
 
     #[test]
     fn rejects_a_notify_lead_outside_the_range() {
-        let mut settings = Settings::default();
-        settings.notify_lead_minutes = 0;
-        assert!(validate(settings).is_err());
-        let mut settings = Settings::default();
-        settings.notify_lead_minutes = 181;
-        assert!(validate(settings).is_err());
+        let too_short = Settings {
+            notify_lead_minutes: 0,
+            ..Default::default()
+        };
+        assert!(validate(too_short).is_err());
+        let too_long = Settings {
+            notify_lead_minutes: 181,
+            ..Default::default()
+        };
+        assert!(validate(too_long).is_err());
     }
 }

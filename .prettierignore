@@ -1,0 +1,8 @@
+# フロントエンド以外は Prettier の対象にしない。
+node_modules
+dist
+coverage
+src-tauri
+.github
+package-lock.json
+*.md

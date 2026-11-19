@@ -256,7 +256,7 @@ fn wait_until_notify(app: &AppHandle, generation: u64, at_ms: i64) -> bool {
                 .load(Ordering::SeqCst)
                 == generation;
         }
-        let slice = ((at_ms - now) as u64).min(30_000).max(1);
+        let slice = ((at_ms - now) as u64).clamp(1, 30_000);
         std::thread::sleep(Duration::from_millis(slice));
     }
 }

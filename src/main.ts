@@ -329,11 +329,7 @@ async function submitSettings(): Promise<void> {
     return;
   }
   const notifyLead = Number(inputValue("notify-lead"));
-  if (
-    !Number.isInteger(notifyLead) ||
-    notifyLead < MIN_NOTIFY_LEAD_MINUTES ||
-    notifyLead > MAX_NOTIFY_LEAD_MINUTES
-  ) {
+  if (!Number.isInteger(notifyLead) || notifyLead < MIN_NOTIFY_LEAD_MINUTES || notifyLead > MAX_NOTIFY_LEAD_MINUTES) {
     setFormError("通知は 1 分前から 180 分前にしてください。");
     return;
   }

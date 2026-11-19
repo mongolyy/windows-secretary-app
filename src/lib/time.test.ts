@@ -10,15 +10,11 @@ describe("time zones", () => {
   });
 
   it("interprets a Tokyo wall clock independent of the machine zone", () => {
-    expect(wallTimeToUtcMs(2026, 11, 19, 10, 0, 0, "Asia/Tokyo")).toBe(
-      Date.parse("2026-11-19T01:00:00.000Z"),
-    );
+    expect(wallTimeToUtcMs(2026, 11, 19, 10, 0, 0, "Asia/Tokyo")).toBe(Date.parse("2026-11-19T01:00:00.000Z"));
   });
 
   it("interprets a New York winter wall clock as UTC-5", () => {
-    expect(wallTimeToUtcMs(2026, 11, 19, 10, 0, 0, "America/New_York")).toBe(
-      Date.parse("2026-11-19T15:00:00.000Z"),
-    );
+    expect(wallTimeToUtcMs(2026, 11, 19, 10, 0, 0, "America/New_York")).toBe(Date.parse("2026-11-19T15:00:00.000Z"));
   });
 
   it("treats the Tokyo day as starting at 15:00 UTC the previous day", () => {

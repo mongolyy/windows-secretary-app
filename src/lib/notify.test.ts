@@ -20,9 +20,7 @@ const AT_10 = Date.UTC(2026, 10, 19, 1, 0, 0);
 
 const enabled: NotifySettings = { enabled: true, leadMinutes: LEAD };
 
-function meeting(
-  partial: Partial<ScheduleEvent> & Pick<ScheduleEvent, "title" | "startMs">,
-): ScheduleEvent {
+function meeting(partial: Partial<ScheduleEvent> & Pick<ScheduleEvent, "title" | "startMs">): ScheduleEvent {
   return {
     id: partial.id ?? `row-${partial.rowNumber ?? 2}`,
     endMs: partial.endMs ?? partial.startMs + 30 * MINUTE,

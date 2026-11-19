@@ -51,16 +51,17 @@ pub fn decode_schedule_bytes(bytes: &[u8]) -> Result<String, String> {
 }
 
 fn decode_utf16(bytes: &[u8], little_endian: bool) -> Result<String, String> {
-    if bytes.len() % 2 != 0 {
+    if !bytes.len().is_multiple_of(2) {
         return Err("UTF-16として読めません".into());
     }
-    let units = bytes
-        .chunks_exact(2)
+    let (chunks, _) = bytes.as_chunks::<2>();
+    let units = chunks
+        .iter()
         .map(|chunk| {
             if little_endian {
-                u16::from_le_bytes([chunk[0], chunk[1]])
+                u16::from_le_bytes(*chunk)
             } else {
-                u16::from_be_bytes([chunk[0], chunk[1]])
+                u16::from_be_bytes(*chunk)
             }
         })
         .collect::<Vec<_>>();
@@ -139,7 +140,8 @@ mod tests {
             .join("ada")
             .join("secretary")
             .join("schedule.csv");
-        assert!(event_targets_schedule(&[schedule.clone()], &schedule));
+        let same_file = [schedule.clone()];
+        assert!(event_targets_schedule(&same_file, &schedule));
         assert!(event_targets_schedule(
             &[PathBuf::from("schedule.csv")],
             &schedule

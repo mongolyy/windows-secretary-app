@@ -143,16 +143,11 @@ export async function listenForNotificationActions(
 
 let notifyPermission: boolean | null = null;
 
-export async function showMeetingNotification(notice: {
-  title: string;
-  body: string;
-  url?: string;
-}): Promise<boolean> {
+export async function showMeetingNotification(notice: { title: string; body: string; url?: string }): Promise<boolean> {
   if (!isDesktop()) return false;
   try {
-    const { isPermissionGranted, requestPermission, sendNotification } = await import(
-      "@tauri-apps/plugin-notification"
-    );
+    const { isPermissionGranted, requestPermission, sendNotification } =
+      await import("@tauri-apps/plugin-notification");
     if (notifyPermission == null) {
       let granted = await isPermissionGranted();
       if (!granted) {

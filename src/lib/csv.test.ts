@@ -23,10 +23,7 @@ describe("parseCsv", () => {
     const table = parseCsv('"Weekly sync, all hands","November 19, 2026 10:00 AM → 10:30 AM"\n');
     expect(table.ok).toBe(true);
     if (!table.ok) return;
-    expect(table.rows[0]).toEqual([
-      "Weekly sync, all hands",
-      "November 19, 2026 10:00 AM → 10:30 AM",
-    ]);
+    expect(table.rows[0]).toEqual(["Weekly sync, all hands", "November 19, 2026 10:00 AM → 10:30 AM"]);
   });
 
   it("unescapes doubled quotes and allows a newline inside a field", () => {
