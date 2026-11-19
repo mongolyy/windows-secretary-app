@@ -12,6 +12,7 @@
 // 使い方（リポジトリのルートで）:
 //   node scripts/version.mjs check-consistent
 //   node scripts/version.mjs check v0.1.0
+//   node scripts/version.mjs validate 0.1.0
 //   node scripts/version.mjs set 0.1.0
 //
 // check は引数を省くと環境変数 RELEASE_TAG を読む。
@@ -199,12 +200,18 @@ function writeVersion(version) {
   }
 }
 
+function validateVersion(version) {
+  assertSemver(version, "指定したバージョン");
+  console.log(`バージョン ${version} は SemVer です。`);
+}
+
 function printUsage() {
   fail(
     [
       "使い方:",
       "  node scripts/version.mjs check-consistent",
       "  node scripts/version.mjs check v0.1.0",
+      "  node scripts/version.mjs validate 0.1.0",
       "  node scripts/version.mjs set 0.1.0",
     ].join("\n"),
   );
@@ -226,6 +233,11 @@ if (command === "check-consistent") {
     fail("確認するタグを指定してください。例: node scripts/version.mjs check v0.1.0");
   }
   checkTag(tag);
+} else if (command === "validate") {
+  if (!arg) {
+    fail("検証するバージョンを指定してください。例: node scripts/version.mjs validate 0.1.0");
+  }
+  validateVersion(arg);
 } else if (command === "set") {
   if (!arg) {
     fail("設定するバージョンを指定してください。例: node scripts/version.mjs set 0.1.0");
