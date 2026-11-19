@@ -16,6 +16,18 @@ fn default_threshold() -> u32 {
     1440
 }
 
+fn default_false() -> bool {
+    false
+}
+
+fn default_notify_enabled() -> bool {
+    true
+}
+
+fn default_lead_minutes() -> u32 {
+    5
+}
+
 fn default_schedule_path_string() -> String {
     default_schedule_path().to_string_lossy().into_owned()
 }
@@ -63,6 +75,15 @@ pub struct Settings {
     pub always_on_top: bool,
     #[serde(default = "default_true")]
     pub close_to_tray: bool,
+    /// Windows へのログイン時に、ウィンドウを出さずトレイへ起動する。
+    #[serde(default = "default_false")]
+    pub launch_at_login: bool,
+    /// 次の時刻指定の予定が始まる前に、デスクトップ通知を出す。
+    #[serde(default = "default_notify_enabled")]
+    pub notify_enabled: bool,
+    /// 開始の何分前に知らせるか。1 から 180。
+    #[serde(default = "default_lead_minutes")]
+    pub notify_lead_minutes: u32,
 }
 
 impl Default for Settings {
@@ -75,6 +96,9 @@ impl Default for Settings {
             stale_threshold_minutes: default_threshold(),
             always_on_top: true,
             close_to_tray: true,
+            launch_at_login: false,
+            notify_enabled: true,
+            notify_lead_minutes: default_lead_minutes(),
         }
     }
 }
@@ -89,6 +113,9 @@ pub struct SettingsDto {
     pub stale_threshold_minutes: u32,
     pub always_on_top: bool,
     pub close_to_tray: bool,
+    pub launch_at_login: bool,
+    pub notify_enabled: bool,
+    pub notify_lead_minutes: u32,
     pub effective_schedule_path: String,
     pub path_overridden_by_env: bool,
 }
@@ -153,6 +180,9 @@ impl Settings {
             stale_threshold_minutes: self.stale_threshold_minutes,
             always_on_top: self.always_on_top,
             close_to_tray: self.close_to_tray,
+            launch_at_login: self.launch_at_login,
+            notify_enabled: self.notify_enabled,
+            notify_lead_minutes: self.notify_lead_minutes,
             effective_schedule_path: path.to_string_lossy().into_owned(),
             path_overridden_by_env: overridden,
         }
@@ -178,6 +208,9 @@ pub fn validate(input: Settings) -> Result<Settings, String> {
     if !valid_tz_name(&time_zone) {
         return Err("タイムゾーンの名前が不正です".into());
     }
+    if !(1..=180).contains(&input.notify_lead_minutes) {
+        return Err("通知は 1 分前から 180 分前にしてください".into());
+    }
     Ok(Settings {
         schedule_path,
         auto_detect_columns: input.auto_detect_columns,
@@ -192,6 +225,9 @@ pub fn validate(input: Settings) -> Result<Settings, String> {
         stale_threshold_minutes: input.stale_threshold_minutes,
         always_on_top: input.always_on_top,
         close_to_tray: input.close_to_tray,
+        launch_at_login: input.launch_at_login,
+        notify_enabled: input.notify_enabled,
+        notify_lead_minutes: input.notify_lead_minutes,
     })
 }
 
@@ -297,5 +333,31 @@ mod tests {
         assert_eq!(settings.stale_threshold_minutes, 1440);
         assert!(settings.auto_detect_columns);
         assert!(settings.always_on_top);
+        assert!(!settings.launch_at_login);
+        assert!(settings.notify_enabled);
+        assert_eq!(settings.notify_lead_minutes, 5);
+    }
+
+    #[test]
+    fn older_settings_file_keeps_login_and_notify_defaults() {
+        let parsed: Settings = serde_json::from_str("{}").unwrap();
+        let settings = validate(parsed).unwrap();
+        assert!(!settings.launch_at_login);
+        assert!(settings.notify_enabled);
+        assert_eq!(settings.notify_lead_minutes, 5);
+    }
+
+    #[test]
+    fn rejects_a_notify_lead_outside_the_range() {
+        let too_short = Settings {
+            notify_lead_minutes: 0,
+            ..Default::default()
+        };
+        assert!(validate(too_short).is_err());
+        let too_long = Settings {
+            notify_lead_minutes: 181,
+            ..Default::default()
+        };
+        assert!(validate(too_long).is_err());
     }
 }

@@ -48,6 +48,12 @@ export type PersistedSettings = {
   staleThresholdMinutes: number;
   alwaysOnTop: boolean;
   closeToTray: boolean;
+  /** Windows へのログイン時に、ウィンドウを出さずトレイへ起動する。 */
+  launchAtLogin: boolean;
+  /** 次の時刻指定の予定が始まる前に通知する。 */
+  notifyEnabled: boolean;
+  /** 開始の何分前に知らせるか。1 から 180。 */
+  notifyLeadMinutes: number;
 };
 
 export type SettingsDto = PersistedSettings & {

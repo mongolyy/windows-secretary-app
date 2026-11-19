@@ -401,6 +401,12 @@ dialog::backdrop {
   color: var(--muted);
   font-size: 12px;
 }
+.group-label {
+  margin: 6px 0 0;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+}
 
 .field,
 .columns label {
