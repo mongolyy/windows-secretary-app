@@ -275,13 +275,13 @@ test("registry.npmjs.org と crates.io 以外は失敗する", () => {
   files["package-lock.json"] = JSON.stringify(npm);
   const npmResult = withFixture(files);
   assert.equal(npmResult.status, 1);
-  assert.match(npmResult.stderr, /registry.npmjs.org/);
+  assert.match(npmResult.stderr, /registry\.npmjs\.org/);
 
   const cargoFiles = baseFiles(ciWorkflow(goodSteps));
   cargoFiles["src-tauri/Cargo.lock"] = 'source = "git+https://github.com/example/crate.git"\n';
   const cargoResult = withFixture(cargoFiles);
   assert.equal(cargoResult.status, 1);
-  assert.match(cargoResult.stderr, /crates.io/);
+  assert.match(cargoResult.stderr, /crates\.io/);
 });
 
 test("このリポジトリを検査する", () => {
