@@ -74,8 +74,10 @@ copy 書き出した.csv $env:USERPROFILE\secretary\schedule.csv
 ## セットアップ
 
 ```powershell
-npm ci
+npm ci --ignore-scripts
 ```
+
+`.npmrc` でも公式レジストリ、lockfile、`ignore-scripts` を固定しているので、フラグを省いた `npm ci` もスクリプトを走らせません。lock にある install スクリプトは macOS 用の任意依存 `fsevents` だけで、この Windows アプリでは実行しません。
 
 ## 開発
 
@@ -118,7 +120,7 @@ copy samples\notion-ja.csv $env:USERPROFILE\secretary\schedule.csv
 npm test
 npm run test:coverage
 node --test scripts/*.test.mjs
-cargo test --manifest-path src-tauri/Cargo.toml
+cargo test --manifest-path src-tauri/Cargo.toml --locked
 ```
 
 `npm test` は CSV、Notion の日付（日本語・英語・終日・タイムゾーン）、列の自動判定、次の予定と残り時間、開始前の通知（同じ予定は一度、時刻が変わったら新しい時刻）です。Rust 側はパス、文字コード（UTF-8 BOM と UTF-16）、ファイルの読み分け、ログイン時の起動コマンド、通知の記録です。`npm run test:coverage` は同じ Vitest を、カバレッジ付きで実行します。
@@ -133,25 +135,88 @@ cargo fmt --all --manifest-path src-tauri/Cargo.toml -- --check
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
 ```
 
+`cargo fmt` は依存を解決しないので、`--locked` は付けません。`cargo fmt` はそのフラグを受け付けません。
+
 ## CI
 
-ブランチへの push と、フォークからの pull_request で、次の 3 ジョブが `windows-latest` で並行して動きます。同じリポジトリからの pull_request は、同じコミットの push ですでに走っているので繰り返しません。タグの push ではこの CI は動かず、下のリリース用ワークフローだけがインストーラを作ります。新しい push が来ると、同じブランチでまだ走っている実行はキャンセルします。
+ブランチへの push と、フォークからの pull_request で検査します。同じリポジトリからの pull_request は、同じコミットの push ですでに走っているジョブをスキップします。条件は `github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository` です。フォークは head のリポジトリ名が違うので、この CI が実行されます。`pull_request_target` は使いません。フォークの実行にはシークレットを渡さず、GitHub がトークンを読み取り専用にします。キャッシュの保存と成果物のアップロードは pull_request では走らせません。
 
-npm は `actions/setup-node` の cache、Cargo は `swatinem/rust-cache` を使います。ジョブごとにキャッシュのキーが分かれるので、テスト用の debug ビルドとリリースビルドが互いを上書きしません。使う Action はコミット SHA で固定しています。
+依存関係の差分だけは、pull_request でしか差分が取れないため、同一リポジトリの PR でもフォークの PR でも実行します。
+
+タグの push ではこの CI は動かず、下のリリース用ワークフローだけがインストーラを作ります。新しい push が来ると、同じブランチでまだ走っている実行はキャンセルします。
+
+push のジョブでは、npm は `actions/setup-node` の cache、Cargo は `swatinem/rust-cache` を使います。リリースのビルドと、フォークの pull_request ではキャッシュを使いません。使う Action はコミット SHA で固定しています。ワークフロー既定の permissions は空で、必要な権限はジョブに書きます。各ジョブの最初は `step-security/harden-runner` の `egress-policy: audit` です。
 
 | ジョブ | 内容 |
 | --- | --- |
-| フロントエンド | 6 箇所のバージョンが揃っていること、スクリプトのテスト、Prettier、ESLint、`tsc --noEmit`、Vitest のカバレッジ、`npm audit` |
-| Rust | `cargo fmt --check`、`cargo clippy -D warnings`、`cargo audit`、`cargo llvm-cov`（単体テストをカバレッジ付きで実行） |
-| Windows ビルド | `npm run tauri build`（NSIS）。ポータブル版の zip とチェックサムを作り、スモークチェックする。`main` への push では開発版を成果物 `secretary-dev-<sha>` に 3 日残す |
+| フロントエンド | 6 箇所のバージョンが揃っていること、スクリプトのテスト、Prettier、ESLint、`tsc --noEmit`、Vitest のカバレッジ、`npm audit`、`npm audit signatures` |
+| Rust | `cargo fmt --check`、`cargo clippy -D warnings`、`cargo deny`、`cargo llvm-cov`（単体テストをカバレッジ付きで実行） |
+| Windows ビルド | `npm run tauri build -- -- --locked`（NSIS）。ポータブル版の zip とチェックサムを作り、スモークチェックする。`main` への push では開発版を成果物 `secretary-dev-<sha>` に 3 日残す |
+| ワークフローの監査 | `actionlint`、`zizmor`、ロックファイルとワークフロー方針の検査。ubuntu-latest |
+| 依存関係の差分 | `actions/dependency-review-action`。pull_request だけ。high 以上の脆弱性と、禁止したライセンスで失敗する |
 
-カバレッジは Actions のアーティファクトに 14 日残します。フロントエンドは `coverage-frontend`（HTML と lcov）、Rust は `coverage-rust`（lcov）です。しきい値では失敗させません。`main` への push では、同じ Windows ビルドからインストーラ、ポータブル版、チェックサムを `secretary-dev-<sha>` として 3 日残します。開発版であり、正式な Release ではありません。
+カバレッジは Actions のアーティファクトに 14 日残します。フロントエンドは `coverage-frontend`（HTML と lcov）、Rust は `coverage-rust`（lcov）です。しきい値では失敗させません。`main` への push では、同じ Windows ビルドからインストーラ、ポータブル版、チェックサムを `secretary-dev-<sha>` として 3 日残します。開発版であり、正式な Release ではありません。フォークの pull_request では、書き込みが要るアップロードをしないので、カバレッジのアーティファクトは残りません。
 
-`npm audit --audit-level=moderate` は指摘があれば失敗します。いまの lock では 0 件です。
+`npm audit --audit-level=moderate` は指摘があれば失敗します。いまの lock では 0 件です。`npm audit signatures` はレジストリ署名を検証します。
 
-`cargo audit` は脆弱性があれば失敗します。未メンテナンスや unsound の警告はログに残しますが、失敗にはしません。いまの lock では推移的依存に警告が 6 件あります（chrono、proc-macro-error、zbus 系、glib）。直す版がアプリから選べないか、Windows の実行では使わない Linux 側のクレートです。`--deny warnings` にすると毎回赤くなるので、警告はレポートだけにしています。
+`cargo deny`（`deny.toml`）は、Windows（`x86_64-pc-windows-msvc`）向けの依存グラフについて、脆弱性、ライセンス、ワイルドカード依存、crates.io 以外のソースを失敗させます。重複バージョンは warn で、失敗にはしません。tauri とプラグインが dirs や syn などを複数引くためです。以前の `cargo audit` が出していた未メンテナンス警告は、配布ビルドに入らない Linux 側のクレートでした。同じ RustSec のデータベースを `cargo deny` の advisories が見るので、`cargo audit` は外しました。
 
-Dependabot（`.github/dependabot.yml`）は npm、Cargo（`src-tauri`）、GitHub Actions の更新を、月曜起点の週次でプルリクエストにします。
+Dependabot（`.github/dependabot.yml`）は npm、Cargo（`src-tauri`）、GitHub Actions の更新を、月曜起点の週次でプルリクエストにします。公開直後の版は cooldown で待ちます。npm と Cargo は既定 7 日、メジャー 14 日、マイナー 7 日、パッチ 4 日です。GitHub Actions は SemVer の日数を受け付けないので、既定 7 日だけです。セキュリティ更新に cooldown は掛かりません。
+
+CodeQL はリポジトリの default setup です。`.github/workflows/codeql.yml` は置いていません。ワークフローの検査は `.github/workflows` 配下の YAML を全部見るので、後からファイルが増えても SHA 固定、`persist-credentials`、permissions の同じ基準が掛かります。
+
+OpenSSF Scorecard（`.github/workflows/scorecard.yml`）は、main への push と毎週月曜 07:00 UTC に実行し、結果を code scanning にアップロードします。pull_request では動かしません。アクション自身が default branch 以外の push を拒否するため、対象は main だけです。公開リポジトリなので、結果は Scorecard の API にも送られます。点数だけでは失敗させません。
+
+## サプライチェーン対策
+
+依存パッケージと Actions の改ざんを、次で抑えます。
+
+| 対策 | 内容 |
+| --- | --- |
+| npm | `npm ci --ignore-scripts`。`.npmrc` で `https://registry.npmjs.org/`、lockfile 必須、install スクリプト無効 |
+| レジストリ署名 | `npm audit signatures` |
+| Cargo | 依存を解決するコマンドは `--locked`。`cargo fmt` だけは対象外 |
+| ツールの固定 | `cargo-deny` 0.21.0 と `cargo-llvm-cov` 0.9.1 は、チェックサム検証済みの Release バイナリ。失敗時に `cargo install` へは落とさない |
+| cargo deny | 脆弱性、ライセンス許可リスト、`*` 依存の禁止、crates.io 以外の禁止 |
+| ロックの検査 | `package-lock.json` と `src-tauri/Cargo.lock` があり、レジストリが npm 公式と crates.io だけであること |
+| Actions の SHA | `uses:` は 40 桁のコミット SHA。ローカルの `./` だけ例外。タグや短縮 SHA は失敗 |
+| checkout | `persist-credentials: false`。例外は、main へ push するリリース準備のジョブだけ |
+| 権限 | ワークフロー既定は空。書き込みはジョブにだけ付ける |
+| フォーク | `pull_request_target` は使わない。シークレットを参照しない。キャッシュと成果物のアップロードは pull_request では実行しない |
+| キャッシュ | リリースのビルドでは使わない。フォークの pull_request でも使わない |
+| harden-runner | 全ジョブの最初。`egress-policy: audit`。Windows の GitHub-hosted runner でも audit は動く。遮断は通信先を見てから |
+| Dependabot | npm、Cargo、GitHub Actions に cooldown |
+| 依存差分 | 公開リポジトリなので `dependency-review-action` を使う。high 以上で失敗。GPL / AGPL / LGPL / SSPL / BUSL / EUPL を拒否 |
+| zizmor | 1.32.0 をチェックサムで入れて監査する。code scanning へは上げない。このジョブはフォークでも走り、`security-events: write` を持たない |
+| actionlint | 1.7.12 をチェックサムで入れる |
+| Scorecard | 週次と main の push。SARIF を code scanning へ上げる |
+
+入れていないもの:
+
+- harden-runner の `block`。Windows でも v2.20 以降は遮断できるが、先に audit で通信先を見る。
+- npm の `min-release-age`。CI の Node.js 22 に入る npm 10 にはこの設定が無い。公開直後の採用を遅らせるのは Dependabot の cooldown が担う。
+- `cargo audit`。`cargo deny` の advisories と重複する。
+- 依存差分の PR コメント。`pull-requests: write` が必要で、フォークには書き込みを渡さない。
+- zizmor の `self-repository`（`./` を `$/` に変える提案）。actionlint 1.7.12 が `$/` を再利用ワークフローと認識しない。`./` はこのリポジトリ内のパスなので、理由を付けて除外している。
+- `dtolnay/rust-toolchain`。auditor 向けの指摘では `rustup` 直呼びが提案される。インストール手順を SHA 固定のアクションに残している。
+- 下書き Release の作成は `softprops/action-gh-release`（SHA 固定）のまま。`gh release create` は、ジョブのトークンが `contents: write` でも `POST /releases` が 403 になった。zizmor の `superfluous-actions` は、その理由を付けて除外している。
+
+手元での確認:
+
+```powershell
+node scripts/supply-chain.mjs
+npm ci --ignore-scripts
+npm audit --audit-level=moderate
+npm audit signatures
+cargo deny --locked --manifest-path src-tauri/Cargo.toml --config deny.toml check --hide-inclusion-graph all
+```
+
+`cargo deny` は 0.21.0 を使う。CI は Release のチェックサムを検証してから入れる。`actionlint` 1.7.12 と `zizmor` 1.32.0 を入れた環境では、次も実行する。
+
+```powershell
+actionlint
+zizmor --persona regular --collect=workflows --collect=dependabot .github/workflows .github/dependabot.yml
+```
 
 ## ビルド
 
@@ -172,7 +237,7 @@ npm run tauri build
 1. `node scripts/version.mjs validate` で形式を確認する。
 2. 次の 6 箇所をそのバージョンに揃え、差分があれば `main` にコミットする。
 3. タグ `v` + バージョンを打ち、`main` とタグを push する。
-4. 同じ「リリース」ワークフローを直接呼ぶ。`windows-latest` で NSIS とポータブル版をビルドし、下書き Release に添付する。
+4. 同じ「リリース」ワークフローを直接呼ぶ。`windows-latest` で NSIS とポータブル版をビルドし、下書き Release に添付する。このビルドはキャッシュを使わない。
 
 `GITHUB_TOKEN` で push したタグは、他のワークフローの `push` を起動しません。そのため、タグの push を待たず、バージョンを上げたワークフローが `.github/workflows/release.yml` を再利用ワークフローとして呼びます。人がタグを push したときは、これまでどおりその `push` で「リリース」が動きます。
 
@@ -214,7 +279,7 @@ git tag -d v0.1.0
 - `Secretary_<バージョン>_x64-portable.zip`（中は `secretary.exe` だけ。WebView2 は同梱しない）
 - `SHA256SUMS.txt`
 
-ワークフローは、ファイルが揃っていること、サイズが想定の範囲であること、チェックサムがファイルと一致すること、下書きの添付サイズが手元と一致することを確認してから成功にします。ビルド来歴は `actions/attest-build-provenance` で付けます。個人アカウントの非公開リポジトリでは GitHub が保存を拒否するため、そのときはスキップしてログに理由を出します。組織のリポジトリか公開リポジトリで記録に失敗したときは、リリースも失敗します。確認コマンドは [ファイルの確認](#ファイルの確認) です。ポータブル版の前提は [ポータブル版](#ポータブル版) に書いてあります。
+ワークフローは、ファイルが揃っていること、サイズが想定の範囲であること、チェックサムがファイルと一致すること、下書きの添付サイズが手元と一致することを確認してから成功にします。ビルド来歴は `actions/attest-build-provenance` で付けます。個人アカウントの非公開リポジトリでは GitHub が保存を拒否するため、そのときはスキップしてログに理由を出します。いまのリポジトリは公開しているので、来歴を記録します。記録に失敗したときは、リリースも失敗します。確認コマンドは [ファイルの確認](#ファイルの確認) です。ポータブル版の前提は [ポータブル版](#ポータブル版) に書いてあります。
 
 Release の説明には、前のタグからのプルリクエストを [.github/release.yml](.github/release.yml) の見出しで付けます。ラベル `enhancement` / `feature` は「新機能」、`bug` / `fix` は「不具合修正」、`dependencies` は「依存関係」、それ以外は「その他の変更」です。
 

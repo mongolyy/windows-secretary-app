@@ -1,4 +1,5 @@
 # npm、Cargo、GitHub Actions の更新を週次でプルリクエストにする。
+# cooldown は公開直後の版をバージョン更新に取り込まない。セキュリティ更新には適用されない。
 version: 2
 updates:
   - package-ecosystem: npm
@@ -7,6 +8,11 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
+      semver-minor-days: 7
+      semver-patch-days: 4
     labels:
       - dependencies
 
@@ -16,6 +22,11 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
+      semver-minor-days: 7
+      semver-patch-days: 4
     labels:
       - dependencies
 
@@ -25,5 +36,8 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 5
+    # アクションの参照は SemVer の日数指定を受け付けない。default-days だけを書く。
+    cooldown:
+      default-days: 7
     labels:
       - dependencies

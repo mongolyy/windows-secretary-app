@@ -1,0 +1,50 @@
+# OpenSSF Scorecard を週次と main への push で実行し、結果を code scanning に載せる。
+# pull_request では動かさない。id-token と security-events の書き込みをフォークに渡さないため。
+# CodeQL 本体はリポジトリの default setup を使う。このファイルは Scorecard の SARIF をアップロードするだけで、codeql.yml は置かない。
+# publish_results は公開リポジトリの結果を OpenSSF の Scorecard API に送る。低スコアでは失敗させない。
+
+name: Scorecard
+
+on:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: "0 7 * * 1"
+
+permissions: {}
+
+concurrency:
+  group: scorecard-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  analysis:
+    name: Scorecard
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+      security-events: write
+    steps:
+      - name: ランナーの通信を監査する
+        uses: step-security/harden-runner@aebdcf6156ab6691adf63218240e476564a1ed4c # v2.23.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Scorecard を実行する
+        uses: ossf/scorecard-action@fa7117db83c52d787ae5a89f350999701505d78e # v2.5.0
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true
+
+      - name: code scanning にアップロードする
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          sarif_file: results.sarif

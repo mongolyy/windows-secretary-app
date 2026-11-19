@@ -1,0 +1,45 @@
+# Rust 依存の供給元・ライセンス・脆弱性・重複を cargo deny で検査する。
+# 対象は Windows の配布ビルド（x86_64-pc-windows-msvc）。Linux 専用のクレートはグラフに入れない。
+
+[graph]
+targets = ["x86_64-pc-windows-msvc"]
+all-features = false
+no-default-features = false
+
+[advisories]
+ignore = []
+
+[licenses]
+confidence-threshold = 0.8
+# いまの Windows 向けグラフに実際にあるライセンスだけを許可する。
+# ここに無いライセンスのクレートが増えたら失敗するので、追加する前に内容を見る。
+allow = [
+    "0BSD",
+    "Apache-2.0",
+    "BSD-3-Clause",
+    "CC0-1.0",
+    "MIT",
+    "MIT-0",
+    "MPL-2.0",
+    "Unicode-3.0",
+    "Unlicense",
+    "Zlib",
+]
+exceptions = []
+
+[licenses.private]
+# publish = false のアプリ自身にはライセンス表記が無い。第三者クレートだけを検査する。
+ignore = true
+
+# multiple-versions は warn。tauri とプラグインが dirs や syn などを複数引き、アプリから一本化できない。
+# 新しい重複はログに残し、失敗にはしない。バージョン要件の "*" は失敗させる。
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+highlight = "all"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []
