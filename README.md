@@ -153,6 +153,16 @@ npm は `actions/setup-node` の cache、Cargo は `swatinem/rust-cache` を使�
 
 Dependabot（`.github/dependabot.yml`）は npm、Cargo（`src-tauri`）、GitHub Actions の更新を、月曜起点の週次でプルリクエストにします。
 
+## コードスキャン（CodeQL）
+
+CodeQL は、リポジトリ設定の default setup で動いています。解析用のワークフローファイルはリポジトリに無く、Actions の「CodeQL」（`dynamic/github-code-scanning/codeql`）が実行します。`.github/workflows/codeql.yml` は置いていません。default setup が入っているリポジトリに advanced setup のワークフローを足すと、結果のアップロードが衝突します。
+
+対象は JavaScript/TypeScript、Rust、GitHub Actions です。いずれもソースをビルドせずに解析します。クエリスイートは default（精度の高い既定のクエリ）です。件数は増える代わりに誤検知も増えやすい extended にはしていません。
+
+default branch への push、そのブランチ向けの pull request、週次のスケジュールで動きます。週次は、直近 180 日に push か pull request の解析があったときです。
+
+結果は [Security の Code scanning](https://github.com/mongolyy/windows-secretary-app/security/code-scanning) で見ます。アラートが無いときは一覧が空です。あるときはルール名、深刻度、ファイルと行が出ます。閉じるまで残ります。ジョブが成功してもアラートは消えません。ジョブの成否は Actions の CodeQL の実行で見ます。アラートがあっても、その実行自体は失敗にしません。
+
 ## ビルド
 
 Windows で NSIS インストーラを作ります。
