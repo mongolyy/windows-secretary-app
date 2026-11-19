@@ -199,6 +199,7 @@ OpenSSF Scorecard（`.github/workflows/scorecard.yml`）は、main への push �
 - 依存差分の PR コメント。`pull-requests: write` が必要で、フォークには書き込みを渡さない。
 - zizmor の `self-repository`（`./` を `$/` に変える提案）。actionlint 1.7.12 が `$/` を再利用ワークフローと認識しない。`./` はこのリポジトリ内のパスなので、理由を付けて除外している。
 - `dtolnay/rust-toolchain`。auditor 向けの指摘では `rustup` 直呼びが提案される。インストール手順を SHA 固定のアクションに残している。
+- 下書き Release の作成は `softprops/action-gh-release`（SHA 固定）のまま。`gh release create` は、ジョブのトークンが `contents: write` でも `POST /releases` が 403 になった。zizmor の `superfluous-actions` は、その理由を付けて除外している。
 
 手元での確認:
 
@@ -236,7 +237,7 @@ npm run tauri build
 1. `node scripts/version.mjs validate` で形式を確認する。
 2. 次の 6 箇所をそのバージョンに揃え、差分があれば `main` にコミットする。
 3. タグ `v` + バージョンを打ち、`main` とタグを push する。
-4. 同じ「リリース」ワークフローを直接呼ぶ。`windows-latest` で NSIS とポータブル版をビルドし、`gh release create` で下書き Release に添付する。このビルドはキャッシュを使わない。
+4. 同じ「リリース」ワークフローを直接呼ぶ。`windows-latest` で NSIS とポータブル版をビルドし、下書き Release に添付する。このビルドはキャッシュを使わない。
 
 `GITHUB_TOKEN` で push したタグは、他のワークフローの `push` を起動しません。そのため、タグの push を待たず、バージョンを上げたワークフローが `.github/workflows/release.yml` を再利用ワークフローとして呼びます。人がタグを push したときは、これまでどおりその `push` で「リリース」が動きます。
 

@@ -176,35 +176,22 @@ jobs:
           BODY_PATH: ${{ runner.temp }}/release-body.md
         run: node scripts/release-body.mjs
 
-      # ランナー同梱の gh で下書きを作る。サードパーティのリリース用アクションは使わない。
-      # --generate-notes に --notes-file を足すと、本文のあとに自動生成の変更点が付く。
+      # gh release create は、ジョブの GITHUB_TOKEN が contents: write でも
+      # POST /repos/.../releases が 403（Resource not accessible by integration）になった。
+      # 同じトークンで下書きを作れていたこのアクションに戻す。
       - name: Release の下書きへ添付する
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TARGET_SHA: ${{ inputs.ref || github.sha }}
-        run: |
-          set -euo pipefail
-          shopt -s nullglob
-          files=(release-assets/*)
-          if [ "${#files[@]}" -eq 0 ]; then
-            echo "添付するファイルがありません。"
-            exit 1
-          fi
-          args=(
-            "$RELEASE_TAG"
-            "${files[@]}"
-            --draft
-            --verify-tag
-            --target "$TARGET_SHA"
-            --title "秘書 ${RELEASE_TAG}"
-            --notes-file "${RUNNER_TEMP}/release-body.md"
-            --generate-notes
-            --latest=false
-          )
-          case "$RELEASE_TAG" in
-            *-*) args+=(--prerelease) ;;
-          esac
-          gh release create "${args[@]}"
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # zizmor: ignore[superfluous-actions] gh release create は contents: write でも POST /releases が 403 になった。v2.6.2
+        with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          target_commitish: ${{ inputs.ref || github.sha }}
+          draft: true
+          prerelease: ${{ contains(inputs.tag || github.ref_name, '-') }}
+          make_latest: "false"
+          name: 秘書 ${{ inputs.tag || github.ref_name }}
+          generate_release_notes: true
+          body_path: ${{ runner.temp }}/release-body.md
+          fail_on_unmatched_files: true
+          files: release-assets/*
 
       - name: 下書きの添付を確認する
         env:
