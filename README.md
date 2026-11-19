@@ -165,7 +165,7 @@ Dependabot（`.github/dependabot.yml`）は npm、Cargo（`src-tauri`）、GitHu
 
 CodeQL はリポジトリの default setup です。`.github/workflows/codeql.yml` は置いていません。ワークフローの検査は `.github/workflows` 配下の YAML を全部見るので、後からファイルが増えても SHA 固定、`persist-credentials`、permissions の同じ基準が掛かります。
 
-OpenSSF Scorecard（`.github/workflows/scorecard.yml`）は、main への push と毎週月曜 07:00 UTC に実行し、結果を code scanning にアップロードします。pull_request では動かしません。公開リポジトリなので、結果は Scorecard の API にも送られます。点数だけでは失敗させません。
+OpenSSF Scorecard（`.github/workflows/scorecard.yml`）は、main への push と毎週月曜 07:00 UTC に実行し、結果を code scanning にアップロードします。pull_request では動かしません。アクション自身が default branch 以外の push を拒否するため、対象は main だけです。公開リポジトリなので、結果は Scorecard の API にも送られます。点数だけでは失敗させません。
 
 ## サプライチェーン対策
 

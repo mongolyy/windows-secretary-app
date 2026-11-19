@@ -9,8 +9,6 @@ on:
   push:
     branches:
       - main
-      # 動作確認用。確認後にこの行は外す。
-      - cursor/supply-chain-hardening-e4c0
   schedule:
     - cron: "0 7 * * 1"
 
