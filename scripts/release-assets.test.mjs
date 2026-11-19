@@ -271,21 +271,26 @@ test("リリース本文は署名の有無とタグを文面に入れる", () =>
           ...extra,
         },
       });
-    const unsigned = runBody({ SIGN_ENABLED: "false" });
+    const unsigned = runBody({ SIGN_ENABLED: "false", ATTEST_ENABLED: "false" });
     assert.equal(unsigned.status, 0, unsigned.stderr);
     const text = readFileSync(out, "utf8");
     assert.match(text, /署名をスキップしました/);
+    assert.match(text, /来歴の記録はスキップしています/);
     assert.match(text, /Secretary_0\.1\.0_x64-setup\.exe/);
     assert.match(text, /secretary\.exe/);
-    assert.match(text, /gh attestation verify/);
-    assert.match(text, /mongolyy\/windows-secretary-app/);
+    assert.doesNotMatch(text, /gh attestation verify/);
 
-    const signed = runBody({ SIGN_ENABLED: "true", RELEASE_TAG: "v0.2.0-rc.1" });
+    const signed = runBody({ SIGN_ENABLED: "true", ATTEST_ENABLED: "true", RELEASE_TAG: "v0.2.0-rc.1" });
     assert.equal(signed.status, 0, signed.stderr);
     const signedText = readFileSync(out, "utf8");
     assert.match(signedText, /コード署名しています/);
     assert.match(signedText, /Secretary_0\.2\.0-rc\.1_x64-portable\.zip/);
+    assert.match(
+      signedText,
+      /gh attestation verify \.\\Secretary_0\.2\.0-rc\.1_x64-setup\.exe --repo mongolyy\/windows-secretary-app/,
+    );
     assert.doesNotMatch(signedText, /署名をスキップしました/);
+    assert.doesNotMatch(signedText, /来歴の記録はスキップしています/);
 
     const bad = runBody({ RELEASE_TAG: "v1" });
     assert.equal(bad.status, 1);

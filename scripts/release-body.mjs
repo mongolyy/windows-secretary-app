@@ -13,6 +13,7 @@ const tag = process.env.RELEASE_TAG ?? "";
 const repo = process.env.GITHUB_REPOSITORY ?? "";
 const out = process.env.BODY_PATH ?? "";
 const signed = process.env.SIGN_ENABLED === "true";
+const attested = process.env.ATTEST_ENABLED === "true";
 
 if (!TAG.test(tag)) {
   fail(`タグの形式が不正です: ${tag}`);
@@ -30,10 +31,20 @@ const portable = `Secretary_${version}_x64-portable.zip`;
 const signNote = signed
   ? "このビルドはコード署名しています。"
   : "このビルドはコード署名していません。WINDOWS_CERTIFICATE と WINDOWS_CERTIFICATE_PASSWORD が無いため、署名をスキップしました。SmartScreen が出たら「詳細情報」を開き、「実行」を選びます。未署名のアプリを禁止している PC では入れられません。";
+const attestNote = attested
+  ? `ビルド来歴も記録しています。\`gh attestation verify\` で、このリポジトリの Actions でビルドされたことを確認できます。`
+  : "このリポジトリは個人アカウントの非公開リポジトリのため、GitHub がビルド来歴を保存できません。来歴の記録はスキップしています。ファイルの同一性は SHA256 で確認してください。";
+const attestCommands = attested
+  ? `
+gh attestation verify .\\${setup} --repo ${repo}
+gh attestation verify .\\${portable} --repo ${repo}`
+  : "";
 
 const body = `タグ ${tag} から作った下書きです。添付ファイルを確認してから Publish release で公開してください。公開するまで、利用者向けの最新版にはなりません。
 
 ${signNote}
+
+${attestNote}
 
 ## ファイル
 
@@ -49,12 +60,10 @@ PowerShell:
 
 \`\`\`powershell
 Get-FileHash .\\${setup} -Algorithm SHA256
-Get-Content .\\SHA256SUMS.txt
-gh attestation verify .\\${setup} --repo ${repo}
-gh attestation verify .\\${portable} --repo ${repo}
+Get-Content .\\SHA256SUMS.txt${attestCommands}
 \`\`\`
 
-Git Bash では \`sha256sum -c SHA256SUMS.txt\` も使えます。来歴の確認は、このリポジトリの Actions でビルドされたことを見ます。
+Git Bash では \`sha256sum -c SHA256SUMS.txt\` も使えます。
 
 予定の CSV は \`%USERPROFILE%\\secretary\\schedule.csv\` に置きます。
 `;

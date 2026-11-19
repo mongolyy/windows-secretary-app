@@ -135,7 +135,24 @@ jobs:
             --tag "$RELEASE_TAG"
           node scripts/release-smoke.mjs release-assets
 
+      - name: 来歴を付けられるリポジトリか確認する
+        id: attest-gate
+        env:
+          OWNER_TYPE: ${{ github.event.repository.owner.type }}
+          VISIBILITY: ${{ github.event.repository.visibility }}
+        run: |
+          set -euo pipefail
+          if [ "$OWNER_TYPE" = "User" ] && [ "$VISIBILITY" = "private" ]; then
+            echo "個人アカウントの非公開リポジトリでは、GitHub がビルド来歴を保存できません。来歴の記録をスキップします。組織のリポジトリ、または公開リポジトリでは記録します。"
+            echo "::notice::個人アカウントの非公開リポジトリのため、ビルド来歴の記録をスキップします。"
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "このリポジトリではビルド来歴を記録します。"
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: ビルド来歴を記録する
+        if: steps.attest-gate.outputs.enabled == 'true'
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: release-assets/*
@@ -143,6 +160,7 @@ jobs:
       - name: リリース本文を書く
         env:
           SIGN_ENABLED: ${{ steps.sign.outputs.enabled }}
+          ATTEST_ENABLED: ${{ steps.attest-gate.outputs.enabled }}
           BODY_PATH: ${{ runner.temp }}/release-body.md
         run: node scripts/release-body.mjs
 
