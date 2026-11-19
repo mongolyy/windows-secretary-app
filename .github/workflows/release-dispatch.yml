@@ -1,6 +1,8 @@
 # Actions の画面で SemVer を渡すと、main のバージョンを更新してコミットし、タグを打つ。
 # そのあと release.yml を直接呼ぶ。GITHUB_TOKEN で push したタグは、別ワークフローの push トリガーを起動しないため。
 # このファイルが main に入ったあと、実行するブランチは main を選ぶ。
+# git push をするのは prepare だけ。その checkout だけ資格情報を残す。呼び出し先のビルドは残さない。
+# シークレットは release.yml が宣言したものだけを渡す。
 
 name: バージョンを指定してリリースする
 
@@ -32,6 +34,11 @@ jobs:
       tag: ${{ steps.cut.outputs.tag }}
       sha: ${{ steps.cut.outputs.sha }}
     steps:
+      - name: ランナーの通信を監査する
+        uses: step-security/harden-runner@aebdcf6156ab6691adf63218240e476564a1ed4c # v2.23.0
+        with:
+          egress-policy: audit
+
       - name: main で実行されているか確認する
         if: github.ref != 'refs/heads/main'
         run: |
@@ -39,14 +46,17 @@ jobs:
           echo "別のブランチの定義では main にコミットしません。"
           exit 1
 
+      # main へのコミットとタグの push に、checkout の資格情報を残す。他のジョブは残さない。
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: main
           fetch-depth: 1
+          persist-credentials: true
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 22
+          node-version: "22"
+          package-manager-cache: false
 
       - name: バージョンを検証してタグを打つ
         id: cut
@@ -89,8 +99,10 @@ jobs:
       contents: write
       id-token: write
       attestations: write
-    uses: ./.github/workflows/release.yml
+    uses: ./.github/workflows/release.yml # zizmor: ignore[self-repository] actionlint 1.7.12 は $/ を再利用ワークフローと認識しない。./ はこのリポジトリ内。
     with:
       tag: ${{ needs.prepare.outputs.tag }}
       ref: ${{ needs.prepare.outputs.sha }}
-    secrets: inherit
+    secrets:
+      WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+      WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}

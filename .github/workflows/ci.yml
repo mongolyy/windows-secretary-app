@@ -3,6 +3,11 @@
 # main への push では、ビルドした開発版を成果物に 3 日残す。
 # 同じリポジトリからの pull_request は、同じ SHA の push ですでに走っているのでジョブをスキップする。
 # フォークからの pull_request は push がこのリポジトリに届かないので、こちらで実行する。
+# pull_request_target は使わない。フォークのワークフローにはシークレットも書き込み権限も渡さない。
+# フォークの pull_request ではキャッシュを読まない・書かない。リリース用ワークフローもキャッシュを使わない。
+# 既定の permissions は空。必要な権限はジョブに書く。
+# 各ジョブの最初は step-security/harden-runner（egress-policy: audit）。
+# Windows の GitHub-hosted runner でも audit は動く。遮断（block）は通信先の実績を見てからにする。
 
 name: CI
 
@@ -12,9 +17,7 @@ on:
       - "**"
   pull_request:
 
-permissions:
-  contents: read
-  actions: write
+permissions: {}
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -23,19 +26,40 @@ concurrency:
 jobs:
   frontend:
     name: フロントエンド
+    # actions: write は push のカバレッジ保存とキャッシュ保存に使う。
+    # フォークの pull_request では GitHub がトークンを読み取り専用にするため、この権限は付かない。
+    # そのイベントではキャッシュも成果物のアップロードもしない。
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: windows-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: write
     defaults:
       run:
         shell: bash
     steps:
+      - name: ランナーの通信を監査する
+        uses: step-security/harden-runner@aebdcf6156ab6691adf63218240e476564a1ed4c # v2.23.0
+        with:
+          egress-policy: audit
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # フォークの pull_request ではキャッシュを使わない。汚染されたキャッシュを復元せず、書き戻しもしない。
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: github.event_name != 'pull_request'
+        with:
+          node-version: "22"
+          cache: npm
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: github.event_name == 'pull_request'
         with:
-          node-version: 22
-          cache: npm
+          node-version: "22"
+          package-manager-cache: false
 
       - name: バージョン表記が揃っているか確認する
         run: node scripts/version.mjs check-consistent
@@ -44,7 +68,9 @@ jobs:
         run: node --test scripts/*.test.mjs
 
       - name: npm の依存関係を入れる
-        run: npm ci
+        # .npmrc でも ignore-scripts=true。ここでも明示する。
+        # hasInstallScript があるのは macOS 用の任意依存 fsevents だけで、Windows では不要。再実行はしない。
+        run: npm ci --ignore-scripts
 
       - name: Prettier
         run: npm run format:check
@@ -61,7 +87,11 @@ jobs:
       - name: npm audit
         run: npm audit --audit-level=moderate
 
+      - name: npm audit signatures
+        run: npm audit signatures
+
       - name: フロントエンドのカバレッジを保存する
+        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: coverage-frontend
@@ -71,37 +101,55 @@ jobs:
 
   rust:
     name: Rust
+    # actions: write は push のカバレッジ保存とキャッシュ保存に使う。フォークの pull_request には渡らない。
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: windows-latest
     timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: write
     defaults:
       run:
         shell: bash
     steps:
+      - name: ランナーの通信を監査する
+        uses: step-security/harden-runner@aebdcf6156ab6691adf63218240e476564a1ed4c # v2.23.0
+        with:
+          egress-policy: audit
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master
         with:
           toolchain: stable
           components: rustfmt, clippy, llvm-tools-preview
 
+      # フォークの pull_request ではキャッシュを使わない。
       - uses: swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        if: github.event_name != 'pull_request'
         with:
           workspaces: src-tauri -> target
 
+      # cargo fmt は依存を解決しない。--locked は受け付けない。
       - name: cargo fmt
         run: cargo fmt --all --manifest-path src-tauri/Cargo.toml -- --check
 
       - name: cargo clippy
         run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
 
-      - name: cargo-llvm-cov と cargo-audit を入れる
+      # taiki-e/install-action は GitHub Release のチェックサムを検証してから入れる。
+      # fallback: none なので、取得に失敗しても cargo install には落ちない。
+      - name: cargo-llvm-cov と cargo-deny を入れる
         uses: taiki-e/install-action@75a7c0f87bd666af3cdb75c5b9e9d03ab6044e6f # v2.90.6
         with:
-          tool: cargo-llvm-cov,cargo-audit
+          tool: cargo-llvm-cov@0.9.1,cargo-deny@0.21.0
+          fallback: none
 
-      - name: cargo audit
-        run: cargo audit --file src-tauri/Cargo.lock
+      # 重複バージョンは warn（失敗にしない）。グラフは長いので省略する。
+      - name: cargo deny
+        run: cargo deny --locked --manifest-path src-tauri/Cargo.toml --config deny.toml check --hide-inclusion-graph all
 
       - name: cargo test とカバレッジ
         run: |
@@ -109,6 +157,7 @@ jobs:
           cargo llvm-cov --manifest-path src-tauri/Cargo.toml --all-targets --locked --lcov --output-path coverage/rust/lcov.info
 
       - name: Rust のカバレッジを保存する
+        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: coverage-rust
@@ -118,19 +167,37 @@ jobs:
 
   windows-build:
     name: Windows ビルド
+    # actions: write は main の開発版成果物に使う。フォークの pull_request には渡らない。
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: windows-latest
     timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: write
     defaults:
       run:
         shell: bash
     steps:
+      - name: ランナーの通信を監査する
+        uses: step-security/harden-runner@aebdcf6156ab6691adf63218240e476564a1ed4c # v2.23.0
+        with:
+          egress-policy: audit
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: github.event_name != 'pull_request'
         with:
-          node-version: 22
+          node-version: "22"
           cache: npm
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: github.event_name == 'pull_request'
+        with:
+          node-version: "22"
+          package-manager-cache: false
 
       - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master
         with:
@@ -138,14 +205,20 @@ jobs:
           components: rustfmt, clippy
 
       - uses: swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        if: github.event_name != 'pull_request'
         with:
           workspaces: src-tauri -> target
 
       - name: npm の依存関係を入れる
-        run: npm ci
+        # fsevents の install スクリプトだけが lock にある。Windows では不要なので再実行しない。
+        run: npm ci --ignore-scripts
+
+      - name: Cargo.lock が一致するか確認する
+        run: cargo metadata --locked --format-version 1 --manifest-path src-tauri/Cargo.toml > /dev/null
 
       - name: Windows アプリをビルドする
-        run: npm run tauri build
+        # -- の後ろは cargo に渡る。ロックと一致しなければ失敗する。
+        run: npm run tauri build -- -- --locked
 
       - name: ポータブル版とチェックサムを作り、確認する
         env:
@@ -173,3 +246,104 @@ jobs:
           path: release-assets
           retention-days: 3
           if-no-files-found: error
+
+  supply-chain:
+    name: ワークフローの監査
+    # フォークの pull_request でも動く。contents: read だけ。code scanning へのアップロードはしない。
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: ランナーの通信を監査する
+        uses: step-security/harden-runner@aebdcf6156ab6691adf63218240e476564a1ed4c # v2.23.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          package-manager-cache: false
+
+      - name: actionlint と zizmor を入れる
+        env:
+          ACTIONLINT_VERSION: "1.7.12"
+          ACTIONLINT_SHA256: "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
+          ZIZMOR_VERSION: "1.32.0"
+          ZIZMOR_SHA256: "bb110cc765eca9cd7efb2e284a956be5974c60027b0970f16397d86208a9957b"
+        run: |
+          set -euo pipefail
+          dest="${RUNNER_TEMP}/pinned-bin"
+          mkdir -p "$dest"
+          actionlint_archive="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          curl -fsSL -o "${RUNNER_TEMP}/${actionlint_archive}" \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${actionlint_archive}"
+          echo "${ACTIONLINT_SHA256}  ${RUNNER_TEMP}/${actionlint_archive}" | sha256sum -c -
+          tar -xzf "${RUNNER_TEMP}/${actionlint_archive}" -C "$dest" actionlint
+          zizmor_archive="zizmor-x86_64-unknown-linux-gnu.tar.gz"
+          curl -fsSL -o "${RUNNER_TEMP}/${zizmor_archive}" \
+            "https://github.com/zizmorcore/zizmor/releases/download/v${ZIZMOR_VERSION}/${zizmor_archive}"
+          echo "${ZIZMOR_SHA256}  ${RUNNER_TEMP}/${zizmor_archive}" | sha256sum -c -
+          tar -xzf "${RUNNER_TEMP}/${zizmor_archive}" -C "$dest" zizmor
+          echo "$dest" >> "$GITHUB_PATH"
+
+      - name: shellcheck があるか確認する
+        run: command -v shellcheck
+
+      - name: actionlint
+        run: actionlint -color
+
+      - name: zizmor でワークフローを監査する
+        env:
+          # オンライン検査（既知の脆弱なアクション）に使う。リポジトリシークレットではない。
+          GH_TOKEN: ${{ github.token }}
+        run: zizmor --format plain --persona regular --collect=workflows --collect=dependabot .github/workflows .github/dependabot.yml
+
+      - name: ロックファイルとワークフローの方針を検査する
+        run: node scripts/supply-chain.mjs
+
+  dependency-review:
+    name: 依存関係の差分
+    # supply-chain-allow: pull-request-always
+    # 依存の差分は pull_request でしか取れない。同一リポジトリの PR でも、フォークの PR でも実行する。
+    # コメント投稿には pull-requests: write が要る。フォークには書き込みを渡さないので、コメントは出さない。
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: ランナーの通信を監査する
+        uses: step-security/harden-runner@aebdcf6156ab6691adf63218240e476564a1ed4c # v2.23.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # deny-licenses は v5 で非推奨だが、まだ使える。
+      # 許可リストにすると、Unicode-3.0 のような見慣れない寛容ライセンスのたびに失敗する。
+      # 強いコピーレフトとソース公開を要するライセンスだけを拒否する。
+      # high 以上（high と critical）で失敗する。runtime に加え、CI で動く development も見る。
+      - name: 依存関係の脆弱性とライセンスを検査する
+        uses: actions/dependency-review-action@bbc44d14a204704ccc493733616cd1e93a0321ec # v5.0.1
+        with:
+          fail-on-severity: high
+          fail-on-scopes: runtime, development, unknown
+          comment-summary-in-pr: never
+          deny-licenses: >-
+            AGPL-1.0, AGPL-1.0-only, AGPL-1.0-or-later,
+            AGPL-3.0, AGPL-3.0-only, AGPL-3.0-or-later,
+            GPL-1.0, GPL-1.0-only, GPL-1.0-or-later,
+            GPL-2.0, GPL-2.0-only, GPL-2.0-or-later,
+            GPL-3.0, GPL-3.0-only, GPL-3.0-or-later,
+            LGPL-2.0, LGPL-2.0-only, LGPL-2.0-or-later,
+            LGPL-2.1, LGPL-2.1-only, LGPL-2.1-or-later,
+            LGPL-3.0, LGPL-3.0-only, LGPL-3.0-or-later,
+            SSPL-1.0, BUSL-1.1, EUPL-1.1, EUPL-1.2

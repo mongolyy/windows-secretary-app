@@ -3,6 +3,10 @@
 # GITHUB_TOKEN で作ったタグは push トリガーを起動しない。そのときは呼び出し側が workflow_call でこのファイルを直接使う。
 # 人がタグを push したときは、この on.push.tags が動く。
 # 下書きなのは、公開前に人がファイルを確認するため。証明書の Secrets が無いビルドは未署名。
+# 配布物のビルドではキャッシュを使わない。checkout は git の資格情報を残さない。
+# 下書きの作成に contents: write が要る。権限はジョブにだけ付ける。
+# 個人アカウントの非公開リポジトリではビルド来歴を保存できないので、そのときだけスキップする。
+# 公開リポジトリでは来歴を記録し、失敗したらリリースも失敗する。
 
 name: リリース
 
@@ -26,10 +30,7 @@ on:
       WINDOWS_CERTIFICATE_PASSWORD:
         required: false
 
-permissions:
-  contents: write
-  id-token: write
-  attestations: write
+permissions: {}
 
 concurrency:
   group: release-${{ inputs.tag || github.ref }}
@@ -40,20 +41,31 @@ jobs:
     name: インストーラとポータブル版を下書きに添付する
     runs-on: windows-latest
     timeout-minutes: 90
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
     defaults:
       run:
         shell: bash
     env:
       RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
     steps:
+      - name: ランナーの通信を監査する
+        uses: step-security/harden-runner@aebdcf6156ab6691adf63218240e476564a1ed4c # v2.23.0
+        with:
+          egress-policy: audit
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
 
+      # package-manager-cache の既定は true。配布物のビルドではキャッシュを使わない。
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 22
-          cache: npm
+          node-version: "22"
+          package-manager-cache: false
 
       - name: タグとアプリのバージョンが一致するか確認する
         run: node scripts/version.mjs check
@@ -63,12 +75,12 @@ jobs:
           toolchain: stable
           components: rustfmt, clippy
 
-      - uses: swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-        with:
-          workspaces: src-tauri -> target
-
       - name: npm の依存関係を入れる
-        run: npm ci
+        # fsevents の install スクリプトだけが lock にある。Windows では不要なので再実行しない。
+        run: npm ci --ignore-scripts
+
+      - name: Cargo.lock が一致するか確認する
+        run: cargo metadata --locked --format-version 1 --manifest-path src-tauri/Cargo.toml > /dev/null
 
       - name: コード署名の有無を決める
         id: sign
@@ -115,9 +127,9 @@ jobs:
         run: |
           set -euo pipefail
           if [ "$SIGN_ENABLED" = "true" ]; then
-            npm run tauri build -- --bundles nsis --config "$RUNNER_TEMP/tauri.sign.json"
+            npm run tauri build -- --bundles nsis --config "$RUNNER_TEMP/tauri.sign.json" -- --locked
           else
-            npm run tauri build -- --bundles nsis
+            npm run tauri build -- --bundles nsis -- --locked
           fi
 
       - name: ビルド成果物を表示する
@@ -164,19 +176,35 @@ jobs:
           BODY_PATH: ${{ runner.temp }}/release-body.md
         run: node scripts/release-body.mjs
 
+      # ランナー同梱の gh で下書きを作る。サードパーティのリリース用アクションは使わない。
+      # --generate-notes に --notes-file を足すと、本文のあとに自動生成の変更点が付く。
       - name: Release の下書きへ添付する
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
-        with:
-          tag_name: ${{ inputs.tag || github.ref_name }}
-          target_commitish: ${{ inputs.ref || github.sha }}
-          draft: true
-          prerelease: ${{ contains(inputs.tag || github.ref_name, '-') }}
-          make_latest: "false"
-          name: 秘書 ${{ inputs.tag || github.ref_name }}
-          generate_release_notes: true
-          body_path: ${{ runner.temp }}/release-body.md
-          fail_on_unmatched_files: true
-          files: release-assets/*
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ inputs.ref || github.sha }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(release-assets/*)
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "添付するファイルがありません。"
+            exit 1
+          fi
+          args=(
+            "$RELEASE_TAG"
+            "${files[@]}"
+            --draft
+            --verify-tag
+            --target "$TARGET_SHA"
+            --title "秘書 ${RELEASE_TAG}"
+            --notes-file "${RUNNER_TEMP}/release-body.md"
+            --generate-notes
+            --latest=false
+          )
+          case "$RELEASE_TAG" in
+            *-*) args+=(--prerelease) ;;
+          esac
+          gh release create "${args[@]}"
 
       - name: 下書きの添付を確認する
         env:

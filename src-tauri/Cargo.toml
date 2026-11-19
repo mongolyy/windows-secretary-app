@@ -5,6 +5,8 @@ description = "Notion の CSV 書き出しを手元で読む、常時表示の�
 authors = ["secretary"]
 edition = "2021"
 rust-version = "1.90"
+# crates.io には出さない。cargo deny は publish = false のクレートをライセンス検査から外せる。
+publish = false
 
 [lib]
 name = "secretary_lib"
