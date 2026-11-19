@@ -1,3 +1,5 @@
+import type { FiredNotice } from "./notify";
+import { DEFAULT_NOTIFY_LEAD_MINUTES } from "./notify";
 import type { SchedulePayload, SettingsDto } from "./types";
 import { DEFAULT_COLUMNS, DEFAULT_STALE_MINUTES, DEFAULT_TIME_ZONE } from "./types";
 
@@ -81,6 +83,97 @@ export async function closeWindow(): Promise<void> {
   await getCurrentWindow().close();
 }
 
+export async function showMainWindow(): Promise<void> {
+  if (!isDesktop()) return;
+  const { getCurrentWindow } = await import("@tauri-apps/api/window");
+  const window = getCurrentWindow();
+  await window.unminimize();
+  await window.show();
+  await window.setFocus();
+}
+
+export async function loadNotified(): Promise<FiredNotice[]> {
+  if (!isDesktop()) return [];
+  const { invoke } = await import("@tauri-apps/api/core");
+  const records = await invoke<FiredNotice[]>("load_notified");
+  return Array.isArray(records) ? records : [];
+}
+
+export async function saveNotified(records: FiredNotice[]): Promise<void> {
+  if (!isDesktop()) return;
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("save_notified", { records });
+}
+
+export async function scheduleNotifyWake(atMs: number | null): Promise<void> {
+  if (!isDesktop()) return;
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("schedule_notify_wake", { atMs });
+}
+
+export async function listenForNotifyWake(onWake: () => void): Promise<() => void> {
+  if (!isDesktop()) return () => undefined;
+  const { listen } = await import("@tauri-apps/api/event");
+  return listen("notification-due", () => onWake());
+}
+
+/** 通知の「参加する」を押したときと、通知自体を押したとき。 */
+export async function listenForNotificationActions(
+  onJoin: (url: string) => void,
+  onOpenApp: () => void,
+): Promise<void> {
+  if (!isDesktop()) return;
+  const { onAction, registerActionTypes } = await import("@tauri-apps/plugin-notification");
+  await registerActionTypes([
+    {
+      id: "meeting",
+      actions: [{ id: "join", title: "参加する" }],
+    },
+  ]);
+  await onAction((event) => {
+    const extra = event.notification?.extra;
+    const url = extra && typeof extra.url === "string" ? extra.url : "";
+    if (event.actionId === "join" && /^https?:\/\//i.test(url)) {
+      onJoin(url);
+      return;
+    }
+    onOpenApp();
+  });
+}
+
+let notifyPermission: boolean | null = null;
+
+export async function showMeetingNotification(notice: {
+  title: string;
+  body: string;
+  url?: string;
+}): Promise<boolean> {
+  if (!isDesktop()) return false;
+  try {
+    const { isPermissionGranted, requestPermission, sendNotification } = await import(
+      "@tauri-apps/plugin-notification"
+    );
+    if (notifyPermission == null) {
+      let granted = await isPermissionGranted();
+      if (!granted) {
+        const permission = await requestPermission();
+        granted = permission === "granted";
+      }
+      notifyPermission = granted;
+    }
+    if (!notifyPermission) return false;
+    const url = notice.url && /^https?:\/\//i.test(notice.url) ? notice.url : undefined;
+    sendNotification({
+      title: notice.title,
+      body: notice.body,
+      ...(url ? { actionTypeId: "meeting", extra: { url } } : {}),
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function loadPreviewSettings(): SettingsDto {
   const defaults = defaultSettings("samples/notion-ja.csv");
   try {
@@ -107,6 +200,9 @@ function defaultSettings(path: string): SettingsDto {
     staleThresholdMinutes: DEFAULT_STALE_MINUTES,
     alwaysOnTop: true,
     closeToTray: true,
+    launchAtLogin: false,
+    notifyEnabled: true,
+    notifyLeadMinutes: DEFAULT_NOTIFY_LEAD_MINUTES,
     effectiveSchedulePath: path,
     pathOverriddenByEnv: false,
   };
