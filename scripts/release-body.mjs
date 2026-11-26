@@ -26,7 +26,7 @@ if (!out) {
 }
 
 const version = tag.slice(1);
-const setup = `Secretary_${version}_x64-setup.exe`;
+const setup = `Secretary_${version}_x64-setup.zip`;
 const portable = `Secretary_${version}_x64-portable.zip`;
 const signNote = signed
   ? "このビルドはコード署名しています。"
@@ -48,11 +48,11 @@ ${attestNote}
 
 ## ファイル
 
-- \`${setup}\` は NSIS インストーラです。現在のユーザー向けで、管理者権限は要りません。
-- \`${portable}\` は \`secretary.exe\` だけのポータブル版です。インストールは不要です。WebView2 は同梱しません。Windows 11 には入っています。Windows 10 で未導入のときは、先に WebView2 ランタイムが必要です。この zip はランタイムをダウンロードしません。
+- \`${setup}\` は Electrobun のセットアップ一式です。展開して中のセットアップを実行します。現在のユーザー向けで、管理者権限は要りません。
+- \`${portable}\` はアプリ一式のポータブル版です。インストールは不要で、中の \`Secretary.exe\` を起動します。WebView2 は同梱しません。Windows 11 には入っています。Windows 10 で未導入のときは、先に WebView2 ランタイムが必要です。この zip はランタイムをダウンロードしません。
 - \`SHA256SUMS.txt\` は上の 2 ファイルの SHA256 です。
 
-インストーラは、WebView2 が無い PC で初回だけダウンロードします。そのときだけネットワークが要ります。自動アップデートはありません。
+WebView2 が無い Windows 10 では、先にランタイムを入れてから使います。アプリ自身は WebView2 をダウンロードしません。自動アップデートはありません。
 
 ## 確認
 

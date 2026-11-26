@@ -15,6 +15,11 @@ function fail(message) {
   throw new Error(message);
 }
 
+function validZipName(name) {
+  if (!name || name.includes("\\") || name.startsWith("/") || name.endsWith("/")) return false;
+  return name.split("/").every((part) => part.length > 0 && part !== "." && part !== "..");
+}
+
 export function crc32(buffer) {
   let crc = 0xffffffff;
   for (const byte of buffer) {
@@ -34,13 +39,8 @@ export function writeZip(entries, outPath) {
   const centrals = [];
   let offset = 0;
   for (const entry of entries) {
-    if (
-      typeof entry.name !== "string" ||
-      entry.name.length === 0 ||
-      entry.name.includes("/") ||
-      entry.name.includes("\\")
-    ) {
-      fail(`ZIP 内の名前はパス区切りの無いファイル名にしてください: ${entry.name}`);
+    if (typeof entry.name !== "string" || !validZipName(entry.name)) {
+      fail(`ZIP 内の名前が不正です: ${entry.name}`);
     }
     const name = Buffer.from(entry.name, "utf8");
     const data = Buffer.from(entry.data);

@@ -4,6 +4,7 @@
     "useDefineForClassFields": true,
     "module": "ESNext",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["node"],
     "skipLibCheck": true,
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
@@ -13,7 +14,13 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "paths": {
+      "electrobun": ["./src/lib/electrobun-main-stub.ts"],
+      "electrobun/main": ["./src/lib/electrobun-main-stub.ts"],
+      "electrobun/view": ["./src/lib/electrobun-view-stub.ts"]
+    }
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": ["src/bun"]
 }

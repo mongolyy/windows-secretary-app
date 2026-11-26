@@ -1,5 +1,5 @@
 # タグの push、または「バージョンを指定してリリースする」からの workflow_call で、
-# Windows の NSIS インストーラとポータブル版をビルドし、同じタグの GitHub Release の下書きに添付する。
+# Windows の Electrobun セットアップとポータブル版をビルドし、同じタグの GitHub Release の下書きに添付する。
 # GITHUB_TOKEN で作ったタグは push トリガーを起動しない。そのときは呼び出し側が workflow_call でこのファイルを直接使う。
 # 人がタグを push したときは、この on.push.tags が動く。
 # 下書きなのは、公開前に人がファイルを確認するため。証明書の Secrets が無いビルドは未署名。
@@ -67,20 +67,17 @@ jobs:
           node-version: "22"
           package-manager-cache: false
 
+      # Bun 本体もキャッシュしない。
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: "1.4.4"
+          no-cache: true
+
       - name: タグとアプリのバージョンが一致するか確認する
         run: node scripts/version.mjs check
 
-      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master
-        with:
-          toolchain: stable
-          components: rustfmt, clippy
-
-      - name: npm の依存関係を入れる
-        # fsevents の install スクリプトだけが lock にある。Windows では不要なので再実行しない。
-        run: npm ci --ignore-scripts
-
-      - name: Cargo.lock が一致するか確認する
-        run: cargo metadata --locked --format-version 1 --manifest-path src-tauri/Cargo.toml > /dev/null
+      - name: Bun の依存関係を入れる
+        run: bun install --frozen-lockfile --ignore-scripts
 
       - name: コード署名の有無を決める
         id: sign
@@ -116,33 +113,23 @@ jobs:
           echo "enabled=true" >> "$GITHUB_OUTPUT"
           echo "WINDOWS_PFX=$PFX_PATH" >> "$GITHUB_ENV"
 
-      - name: 署名設定を書く
-        if: steps.sign.outputs.enabled == 'true'
-        run: node scripts/sign-config.mjs "$GITHUB_WORKSPACE/scripts/sign-windows.ps1" "$RUNNER_TEMP/tauri.sign.json"
-
-      - name: Windows の NSIS インストーラをビルドする
+      - name: Windows アプリをビルドする
         env:
           SIGN_ENABLED: ${{ steps.sign.outputs.enabled }}
           WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
-        run: |
-          set -euo pipefail
-          if [ "$SIGN_ENABLED" = "true" ]; then
-            npm run tauri build -- --bundles nsis --config "$RUNNER_TEMP/tauri.sign.json" -- --locked
-          else
-            npm run tauri build -- --bundles nsis -- --locked
-          fi
+        run: bun run desktop:build
 
       - name: ビルド成果物を表示する
         run: |
-          ls -la src-tauri/target/release/*.exe
-          ls -la src-tauri/target/release/bundle/nsis
+          set -euo pipefail
+          find artifacts build -type f | head -n 200
 
       - name: ポータブル版とチェックサムを作る
         run: |
           set -euo pipefail
           node scripts/collect-release-assets.mjs \
-            --exe src-tauri/target/release/secretary.exe \
-            --setup-dir src-tauri/target/release/bundle/nsis \
+            --artifacts artifacts \
+            --build build \
             --out release-assets \
             --tag "$RELEASE_TAG"
           node scripts/release-smoke.mjs release-assets

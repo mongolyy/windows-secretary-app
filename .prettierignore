@@ -2,7 +2,10 @@
 node_modules
 dist
 coverage
-src-tauri
+.hutch
+.electrobun
+build
+artifacts
 .github
-package-lock.json
+bun.lock
 *.md

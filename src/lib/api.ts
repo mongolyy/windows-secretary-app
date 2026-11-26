@@ -10,7 +10,11 @@ const STORAGE_KEY = "secretary.settings.v1";
 let previewKind: PreviewKind = "ja";
 
 export function isDesktop(): boolean {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+  return typeof window !== "undefined" && "__electrobun" in window;
+}
+
+async function desktop() {
+  return import("./desktop");
 }
 
 export function setPreviewKind(kind: PreviewKind): void {
@@ -23,8 +27,7 @@ export function getPreviewKind(): PreviewKind {
 
 export async function fetchSettings(): Promise<SettingsDto> {
   if (!isDesktop()) return loadPreviewSettings();
-  const { invoke } = await import("@tauri-apps/api/core");
-  return invoke<SettingsDto>("get_settings");
+  return (await desktop()).fetchSettings();
 }
 
 export async function saveSettings(settings: SettingsDto): Promise<SettingsDto> {
@@ -33,32 +36,22 @@ export async function saveSettings(settings: SettingsDto): Promise<SettingsDto> 
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
     return next;
   }
-  const { invoke } = await import("@tauri-apps/api/core");
-  return invoke<SettingsDto>("set_settings", { incoming: settings });
+  return (await desktop()).saveSettings(settings);
 }
 
 export async function fetchSchedule(): Promise<SchedulePayload> {
   if (!isDesktop()) return previewSchedule();
-  const { invoke } = await import("@tauri-apps/api/core");
-  return invoke<SchedulePayload>("load_schedule");
+  return (await desktop()).fetchSchedule();
 }
 
 export async function listenForScheduleChanges(onChange: () => void): Promise<() => void> {
   if (!isDesktop()) return () => undefined;
-  const { listen } = await import("@tauri-apps/api/event");
-  return listen("schedule-file-changed", () => onChange());
+  return (await desktop()).listenForScheduleChanges(onChange);
 }
 
 export async function pickScheduleFile(): Promise<string | null> {
   if (!isDesktop()) return null;
-  const { open } = await import("@tauri-apps/plugin-dialog");
-  const selected = await open({
-    multiple: false,
-    directory: false,
-    title: "予定のCSVを選択",
-    filters: [{ name: "CSV", extensions: ["csv"] }],
-  });
-  return typeof selected === "string" ? selected : null;
+  return (await desktop()).pickScheduleFile();
 }
 
 export async function openExternal(url: string): Promise<void> {
@@ -67,103 +60,60 @@ export async function openExternal(url: string): Promise<void> {
     window.open(url, "_blank", "noopener");
     return;
   }
-  const { openUrl } = await import("@tauri-apps/plugin-opener");
-  await openUrl(url);
+  await (await desktop()).openExternal(url);
 }
 
 export async function minimizeWindow(): Promise<void> {
   if (!isDesktop()) return;
-  const { getCurrentWindow } = await import("@tauri-apps/api/window");
-  await getCurrentWindow().minimize();
+  await (await desktop()).minimizeWindow();
 }
 
 export async function closeWindow(): Promise<void> {
   if (!isDesktop()) return;
-  const { getCurrentWindow } = await import("@tauri-apps/api/window");
-  await getCurrentWindow().close();
+  await (await desktop()).closeWindow();
 }
 
 export async function showMainWindow(): Promise<void> {
   if (!isDesktop()) return;
-  const { getCurrentWindow } = await import("@tauri-apps/api/window");
-  const window = getCurrentWindow();
-  await window.unminimize();
-  await window.show();
-  await window.setFocus();
+  await (await desktop()).showMainWindow();
 }
 
 export async function loadNotified(): Promise<FiredNotice[]> {
   if (!isDesktop()) return [];
-  const { invoke } = await import("@tauri-apps/api/core");
-  const records = await invoke<FiredNotice[]>("load_notified");
-  return Array.isArray(records) ? records : [];
+  return (await desktop()).loadNotified();
 }
 
 export async function saveNotified(records: FiredNotice[]): Promise<void> {
   if (!isDesktop()) return;
-  const { invoke } = await import("@tauri-apps/api/core");
-  await invoke("save_notified", { records });
+  await (await desktop()).saveNotified(records);
 }
 
 export async function scheduleNotifyWake(atMs: number | null): Promise<void> {
   if (!isDesktop()) return;
-  const { invoke } = await import("@tauri-apps/api/core");
-  await invoke("schedule_notify_wake", { atMs });
+  await (await desktop()).scheduleNotifyWake(atMs);
 }
 
 export async function listenForNotifyWake(onWake: () => void): Promise<() => void> {
   if (!isDesktop()) return () => undefined;
-  const { listen } = await import("@tauri-apps/api/event");
-  return listen("notification-due", () => onWake());
+  return (await desktop()).listenForNotifyWake(onWake);
 }
 
-/** 通知の「参加する」を押したときと、通知自体を押したとき。 */
+/**
+ * 通知のボタンは、Electrobun の Windows 通知では受け取れない。
+ * 参加リンクは画面の「参加する」から開く。
+ */
 export async function listenForNotificationActions(
   onJoin: (url: string) => void,
   onOpenApp: () => void,
 ): Promise<void> {
-  if (!isDesktop()) return;
-  const { onAction, registerActionTypes } = await import("@tauri-apps/plugin-notification");
-  await registerActionTypes([
-    {
-      id: "meeting",
-      actions: [{ id: "join", title: "参加する" }],
-    },
-  ]);
-  await onAction((event) => {
-    const extra = event.notification?.extra;
-    const url = extra && typeof extra.url === "string" ? extra.url : "";
-    if (event.actionId === "join" && /^https?:\/\//i.test(url)) {
-      onJoin(url);
-      return;
-    }
-    onOpenApp();
-  });
+  void onJoin;
+  void onOpenApp;
 }
-
-let notifyPermission: boolean | null = null;
 
 export async function showMeetingNotification(notice: { title: string; body: string; url?: string }): Promise<boolean> {
   if (!isDesktop()) return false;
   try {
-    const { isPermissionGranted, requestPermission, sendNotification } =
-      await import("@tauri-apps/plugin-notification");
-    if (notifyPermission == null) {
-      let granted = await isPermissionGranted();
-      if (!granted) {
-        const permission = await requestPermission();
-        granted = permission === "granted";
-      }
-      notifyPermission = granted;
-    }
-    if (!notifyPermission) return false;
-    const url = notice.url && /^https?:\/\//i.test(notice.url) ? notice.url : undefined;
-    sendNotification({
-      title: notice.title,
-      body: notice.body,
-      ...(url ? { actionTypeId: "meeting", extra: { url } } : {}),
-    });
-    return true;
+    return (await desktop()).showMeetingNotification(notice);
   } catch {
     return false;
   }

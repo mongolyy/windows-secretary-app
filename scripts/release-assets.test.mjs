@@ -59,29 +59,28 @@ test("チェックサムの書き出しと照合ができる", () => {
   }
 });
 
-test("配布物を揃え、zip の中は exe だけで、スモークが通る", () => {
+test("配布物を揃え、ポータブル版に exe があり、スモークが通る", () => {
   const root = tempRoot();
   try {
-    const nsis = join(root, "nsis");
-    mkdirSync(nsis);
-    const exe = join(root, "secretary.exe");
-    writeBytes(exe, 5000, 3);
-    writeBytes(join(nsis, "Secretary_0.1.0_x64-setup.exe"), 4000, 9);
-    const tauri = {
-      productName: "Secretary",
-      version: "0.1.0",
-    };
-    writeFileSync(join(root, "tauri.conf.json"), JSON.stringify(tauri));
+    const app = join(root, "app");
+    mkdirSync(join(app, "bin"), { recursive: true });
+    mkdirSync(join(app, "Resources"), { recursive: true });
+    writeBytes(join(app, "bin", "Secretary.exe"), 5000, 3);
+    writeBytes(join(app, "Resources", "marker.txt"), 20, 4);
+    const setup = join(root, "win-x64-Secretary-Setup.zip");
+    writeBytes(setup, 4000, 9);
     const out = join(root, "out");
     const collected = runNode("collect-release-assets.mjs", [
-      "--exe",
-      exe,
-      "--setup-dir",
-      nsis,
+      "--setup",
+      setup,
+      "--app-dir",
+      app,
       "--out",
       out,
-      "--tauri",
-      join(root, "tauri.conf.json"),
+      "--product",
+      "Secretary",
+      "--version",
+      "0.1.0",
       "--tag",
       "v0.1.0",
       "--nope",
@@ -91,14 +90,16 @@ test("配布物を揃え、zip の中は exe だけで、スモークが通る",
     assert.match(collected.stderr, /不明な引数/);
 
     const again = runNode("collect-release-assets.mjs", [
-      "--exe",
-      exe,
-      "--setup-dir",
-      nsis,
+      "--setup",
+      setup,
+      "--app-dir",
+      app,
       "--out",
       out,
-      "--tauri",
-      join(root, "tauri.conf.json"),
+      "--product",
+      "Secretary",
+      "--version",
+      "0.1.0",
       "--tag",
       "v0.1.0",
     ]);
@@ -110,7 +111,7 @@ test("配布物を揃え、zip の中は exe だけで、スモークが通る",
 
     const smoke = runNode("release-smoke.mjs", [out, "--min-setup", "1", "--min-portable", "1"]);
     assert.equal(smoke.status, 0, smoke.stderr);
-    assert.match(smoke.stdout, /secretary\.exe/);
+    assert.match(smoke.stdout, /Secretary\.exe/);
 
     const python = pythonCommand();
     assert.ok(python, "python が必要です");
@@ -118,20 +119,21 @@ test("配布物を揃え、zip の中は exe だけで、スモークが通る",
       python,
       [
         "-c",
-        "import sys, zipfile; z = zipfile.ZipFile(sys.argv[1]); bad = z.testzip(); print('' if bad is None else bad); print('\\n'.join(z.namelist())); data = z.read('secretary.exe'); print(len(data))",
+        "import sys, zipfile; z = zipfile.ZipFile(sys.argv[1]); bad = z.testzip(); print('' if bad is None else bad); print('\\n'.join(sorted(z.namelist()))); data = z.read('bin/Secretary.exe'); print(len(data))",
         join(out, "Secretary_0.1.0_x64-portable.zip"),
       ],
       { encoding: "utf8" },
     );
     assert.equal(listed.status, 0, listed.stderr);
-    assert.match(listed.stdout, /^(\r?\n)?secretary\.exe\r?\n5000\r?\n?$/);
+    assert.match(listed.stdout, /bin\/Secretary\.exe/);
+    assert.match(listed.stdout, /5000/);
 
     const zipHash = createHash("sha256")
       .update(readFileSync(join(out, "Secretary_0.1.0_x64-portable.zip")))
       .digest("hex");
     const sums = readFileSync(join(out, "SHA256SUMS.txt"), "utf8");
     assert.match(sums, new RegExp(`${zipHash}  Secretary_0\\.1\\.0_x64-portable\\.zip`));
-    assert.match(sums, /Secretary_0\.1\.0_x64-setup\.exe/);
+    assert.match(sums, /Secretary_0\.1\.0_x64-setup\.zip/);
     assert.doesNotMatch(sums, /SHA256SUMS/);
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -141,17 +143,17 @@ test("配布物を揃え、zip の中は exe だけで、スモークが通る",
 test("開発版の名前と、タグ不一致、インストーラ名のずれを拒否する", () => {
   const root = tempRoot();
   try {
-    const nsis = join(root, "nsis");
-    mkdirSync(nsis);
-    const exe = join(root, "secretary.exe");
-    writeBytes(exe, 32, 1);
-    writeBytes(join(nsis, "Secretary_0.2.0-rc.1_x64-setup.exe"), 32, 2);
+    const app = join(root, "app");
+    mkdirSync(join(app, "bin"), { recursive: true });
+    writeBytes(join(app, "bin", "Secretary.exe"), 32, 1);
+    const setup = join(root, "win-x64-Secretary-Setup.zip");
+    writeBytes(setup, 32, 2);
     const out = join(root, "out");
     const collected = runNode("collect-release-assets.mjs", [
-      "--exe",
-      exe,
-      "--setup-dir",
-      nsis,
+      "--setup",
+      setup,
+      "--app-dir",
+      app,
       "--out",
       out,
       "--product",
@@ -165,15 +167,15 @@ test("開発版の名前と、タグ不一致、インストーラ名のずれ�
     ]);
     assert.equal(collected.status, 0, collected.stderr);
     assert.equal(
-      readFileSync(join(out, "SHA256SUMS.txt"), "utf8").includes("Secretary_0.2.0-rc.1_x64-dev-abc1234-setup.exe"),
+      readFileSync(join(out, "SHA256SUMS.txt"), "utf8").includes("Secretary_0.2.0-rc.1_x64-dev-abc1234-setup.zip"),
       true,
     );
 
     const mismatch = runNode("collect-release-assets.mjs", [
-      "--exe",
-      exe,
-      "--setup-dir",
-      nsis,
+      "--setup",
+      setup,
+      "--app-dir",
+      app,
       "--out",
       out,
       "--product",
@@ -187,10 +189,10 @@ test("開発版の名前と、タグ不一致、インストーラ名のずれ�
     assert.match(mismatch.stderr, /一致しません/);
 
     const missing = runNode("collect-release-assets.mjs", [
-      "--exe",
-      exe,
-      "--setup-dir",
-      nsis,
+      "--setup",
+      join(root, "missing-setup.zip"),
+      "--app-dir",
+      app,
       "--out",
       out,
       "--product",
@@ -210,7 +212,7 @@ test("下書き Release の添付サイズと digest を手元と照合する", 
   try {
     const out = join(root, "out");
     mkdirSync(out);
-    writeFileSync(join(out, "Secretary_0.1.0_x64-setup.exe"), "setup");
+    writeFileSync(join(out, "Secretary_0.1.0_x64-setup.zip"), "setup");
     writeFileSync(join(out, "Secretary_0.1.0_x64-portable.zip"), "zip");
     writeFileSync(join(out, "SHA256SUMS.txt"), "checksum\n");
     const digest = (name) =>
@@ -221,7 +223,7 @@ test("下書き Release の添付サイズと digest を手元と照合する", 
       tagName: "v0.1.0",
       isDraft: true,
       isPrerelease: false,
-      assets: ["Secretary_0.1.0_x64-setup.exe", "Secretary_0.1.0_x64-portable.zip", "SHA256SUMS.txt"].map((name) => ({
+      assets: ["Secretary_0.1.0_x64-setup.zip", "Secretary_0.1.0_x64-portable.zip", "SHA256SUMS.txt"].map((name) => ({
         name,
         size: readFileSync(join(out, name)).length,
         digest: `sha256:${digest(name)}`,
@@ -276,8 +278,8 @@ test("リリース本文は署名の有無とタグを文面に入れる", () =>
     const text = readFileSync(out, "utf8");
     assert.match(text, /署名をスキップしました/);
     assert.match(text, /来歴の記録はスキップしています/);
-    assert.match(text, /Secretary_0\.1\.0_x64-setup\.exe/);
-    assert.match(text, /secretary\.exe/);
+    assert.match(text, /Secretary_0\.1\.0_x64-setup\.zip/);
+    assert.match(text, /Secretary\.exe/);
     assert.doesNotMatch(text, /gh attestation verify/);
 
     const signed = runBody({ SIGN_ENABLED: "true", ATTEST_ENABLED: "true", RELEASE_TAG: "v0.2.0-rc.1" });
@@ -287,7 +289,7 @@ test("リリース本文は署名の有無とタグを文面に入れる", () =>
     assert.match(signedText, /Secretary_0\.2\.0-rc\.1_x64-portable\.zip/);
     assert.match(
       signedText,
-      /gh attestation verify \.\\Secretary_0\.2\.0-rc\.1_x64-setup\.exe --repo mongolyy\/windows-secretary-app/,
+      /gh attestation verify \.\\Secretary_0\.2\.0-rc\.1_x64-setup\.zip --repo mongolyy\/windows-secretary-app/,
     );
     assert.doesNotMatch(signedText, /署名をスキップしました/);
     assert.doesNotMatch(signedText, /来歴の記録はスキップしています/);

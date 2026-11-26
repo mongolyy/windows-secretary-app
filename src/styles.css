@@ -43,6 +43,8 @@ select {
 
 button {
   cursor: pointer;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
 }
 
 button:focus-visible,
@@ -70,6 +72,9 @@ select:focus-visible {
   align-items: center;
   gap: 8px;
   padding: 12px 12px 8px;
+  -webkit-app-region: drag;
+  app-region: drag;
+  user-select: none;
 }
 
 .brand {

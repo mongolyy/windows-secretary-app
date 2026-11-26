@@ -7,8 +7,8 @@ import { listZipEntries } from "./zip.mjs";
 
 const DEFAULT_MIN_SETUP = 300 * 1024;
 const DEFAULT_MIN_PORTABLE = 400 * 1024;
-const DEFAULT_MAX_SETUP = 80 * 1024 * 1024;
-const DEFAULT_MAX_PORTABLE = 80 * 1024 * 1024;
+const DEFAULT_MAX_SETUP = 150 * 1024 * 1024;
+const DEFAULT_MAX_PORTABLE = 150 * 1024 * 1024;
 
 function fail(message) {
   console.error(message);
@@ -62,11 +62,11 @@ for (const key of Object.keys(flags)) {
   }
 }
 if (positional.length !== 1) {
-  fail("使い方: node scripts/release-smoke.mjs <配布ディレクトリ> [--min-setup N] [--exe-name secretary.exe]");
+  fail("使い方: node scripts/release-smoke.mjs <配布ディレクトリ> [--min-setup N] [--exe-name Secretary.exe]");
 }
 
 const directory = positional[0];
-const exeName = flags["exe-name"] ?? "secretary.exe";
+const exeName = flags["exe-name"] ?? "Secretary.exe";
 const minSetup = numberFlag(flags, "min-setup", DEFAULT_MIN_SETUP);
 const minPortable = numberFlag(flags, "min-portable", DEFAULT_MIN_PORTABLE);
 const maxSetup = numberFlag(flags, "max-setup", DEFAULT_MAX_SETUP);
@@ -80,7 +80,7 @@ try {
 }
 names.sort();
 const expected = ["SHA256SUMS.txt"];
-const setupNames = names.filter((name) => name.endsWith("-setup.exe"));
+const setupNames = names.filter((name) => name.endsWith("-setup.zip"));
 const zipNames = names.filter((name) => name.endsWith("-portable.zip"));
 if (setupNames.length !== 1 || zipNames.length !== 1) {
   fail(`インストーラとポータブル版が 1 件ずつ必要です。見つかったファイル: ${names.join(", ") || "(なし)"}`);
@@ -114,8 +114,9 @@ try {
 } catch (error) {
   fail(error.message);
 }
-if (entries.length !== 1 || entries[0] !== exeName) {
-  fail(`ポータブル版の中身は ${exeName} だけにしてください。実際: ${entries.join(", ") || "(なし)"}`);
+const hasExe = entries.some((entry) => entry === exeName || entry.endsWith(`/${exeName}`));
+if (!hasExe) {
+  fail(`ポータブル版に ${exeName} がありません。実際: ${entries.join(", ") || "(なし)"}`);
 }
 
 console.log("スモークチェックに通りました。");
