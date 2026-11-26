@@ -279,7 +279,7 @@ test("リリース本文は署名の有無とタグを文面に入れる", () =>
     assert.match(text, /署名をスキップしました/);
     assert.match(text, /来歴の記録はスキップしています/);
     assert.match(text, /Secretary_0\.1\.0_x64-setup\.zip/);
-    assert.match(text, /Secretary\.exe/);
+    assert.match(text, /bin\/launcher\.exe/);
     assert.doesNotMatch(text, /gh attestation verify/);
 
     const signed = runBody({ SIGN_ENABLED: "true", ATTEST_ENABLED: "true", RELEASE_TAG: "v0.2.0-rc.1" });

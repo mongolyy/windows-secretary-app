@@ -66,7 +66,7 @@ if (positional.length !== 1) {
 }
 
 const directory = positional[0];
-const exeName = flags["exe-name"] ?? "Secretary.exe";
+const exeNames = flags["exe-name"] ? [flags["exe-name"]] : ["launcher.exe", "Secretary.exe"];
 const minSetup = numberFlag(flags, "min-setup", DEFAULT_MIN_SETUP);
 const minPortable = numberFlag(flags, "min-portable", DEFAULT_MIN_PORTABLE);
 const maxSetup = numberFlag(flags, "max-setup", DEFAULT_MAX_SETUP);
@@ -114,12 +114,12 @@ try {
 } catch (error) {
   fail(error.message);
 }
-const hasExe = entries.some((entry) => entry === exeName || entry.endsWith(`/${exeName}`));
-if (!hasExe) {
-  fail(`ポータブル版に ${exeName} がありません。実際: ${entries.join(", ") || "(なし)"}`);
+const foundExe = entries.find((entry) => exeNames.some((name) => entry === name || entry.endsWith(`/${name}`)));
+if (!foundExe) {
+  fail(`ポータブル版に ${exeNames.join(" または ")} がありません。実際: ${entries.join(", ") || "(なし)"}`);
 }
 
 console.log("スモークチェックに通りました。");
 console.log(`  ${setupName}: ${setupSize} バイト`);
 console.log(`  ${zipName}: ${zipSize} バイト`);
-console.log(`  zip の中: ${exeName}`);
+console.log(`  zip の中: ${foundExe}`);

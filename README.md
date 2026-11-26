@@ -34,7 +34,7 @@ WebView2 は Windows 11 には入っています。Windows 10 で未導入のと
 
 ### ポータブル版
 
-インストーラが使えないときは、同じ Release の `Secretary_<バージョン>_x64-portable.zip` を展開します。中はアプリ一式で、`Secretary.exe` を起動します。インストールは不要です。
+インストーラが使えないときは、同じ Release の `Secretary_<バージョン>_x64-portable.zip` を展開します。中はアプリ一式で、`bin/launcher.exe` を起動します。インストールは不要です。
 
 ポータブル版は WebView2 を同梱しません。ダウンロードもしません。Windows 11 には WebView2 が入っています。Windows 10 で未導入のときは、先に WebView2 の Evergreen ランタイムを入れてください。ネットワークを使わない PC では、WebView2 が入っていることを確認してからこの zip を使います。
 
@@ -259,7 +259,7 @@ git tag -d v0.1.0
 ### 下書きに付くもの
 
 - `Secretary_<バージョン>_x64-setup.zip`
-- `Secretary_<バージョン>_x64-portable.zip`（アプリ一式。`Secretary.exe` を起動する。WebView2 は同梱しない）
+- `Secretary_<バージョン>_x64-portable.zip`（アプリ一式。`bin/launcher.exe` を起動する。WebView2 は同梱しない）
 - `SHA256SUMS.txt`
 
 ワークフローは、ファイルが揃っていること、サイズが想定の範囲であること、チェックサムがファイルと一致すること、下書きの添付サイズが手元と一致することを確認してから成功にします。ビルド来歴は `actions/attest-build-provenance` で付けます。個人アカウントの非公開リポジトリでは GitHub が保存を拒否するため、そのときはスキップしてログに理由を出します。いまのリポジトリは公開しているので、来歴を記録します。記録に失敗したときは、リリースも失敗します。確認コマンドは [ファイルの確認](#ファイルの確認) です。ポータブル版の前提は [ポータブル版](#ポータブル版) に書いてあります。

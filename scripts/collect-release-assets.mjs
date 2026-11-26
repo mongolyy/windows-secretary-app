@@ -78,9 +78,12 @@ function discover(artifactsDir, buildDir) {
   const windows = setups.filter((file) => file.includes(`${sep}win-`) || basename(file).startsWith("win-"));
   const setup = (windows.length > 0 ? windows : setups).sort()[0];
   if (!setup) fail(`インストーラがありません: ${artifactsDir}\n${walk(artifactsDir).slice(0, 40).join("\n")}`);
-  const exes = walk(buildDir).filter((file) => basename(file) === "Secretary.exe");
-  const preferred = exes.find((file) => file.includes(`${sep}bin${sep}`)) ?? exes[0];
-  if (!preferred) fail(`Secretary.exe がありません: ${buildDir}\n${walk(buildDir).slice(0, 40).join("\n")}`);
+  const exes = walk(buildDir).filter((file) => {
+    const name = basename(file).toLowerCase();
+    return name === "launcher.exe" || name === "secretary.exe";
+  });
+  const preferred = exes.find((file) => basename(file).toLowerCase() === "launcher.exe") ?? exes[0];
+  if (!preferred) fail(`アプリの exe がありません: ${buildDir}\n${walk(buildDir).slice(0, 40).join("\n")}`);
   const parent = dirname(preferred);
   const appDir = basename(parent).toLowerCase() === "bin" ? dirname(parent) : parent;
   return { setup, appDir };
@@ -178,5 +181,5 @@ const entries = [setupName, zipName]
 writeFileSync(join(args.out, "SHA256SUMS.txt"), formatChecksums(entries));
 console.log(`配布物を揃えました: ${args.out}`);
 console.log(`  ${setupName}`);
-console.log(`  ${zipName}（アプリ一式。実行ファイルは Secretary.exe）`);
+console.log(`  ${zipName}（アプリ一式。実行ファイルは bin/launcher.exe）`);
 console.log("  SHA256SUMS.txt");
