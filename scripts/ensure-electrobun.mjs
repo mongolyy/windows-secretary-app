@@ -4,7 +4,7 @@
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { createWriteStream, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { basename, dirname, join, relative, sep } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -98,7 +98,13 @@ export async function ensureElectrobun(projectRoot = rootOfScript) {
 
   const hutchDir = join(cache, "hutch");
   mkdirSync(hutchDir, { recursive: true });
-  const extracted = spawnSync("tar", ["-xzf", hutchArchive, "-C", hutchDir], { encoding: "utf8" });
+  // Windows の tar は D: のようなドライブ文字をリモートホストとみなす。作業ディレクトリを合わせて、引数からコロンを除く。
+  const archiveDir = dirname(hutchArchive);
+  const extractDir = relative(archiveDir, hutchDir).split(sep).join("/") || ".";
+  const extracted = spawnSync("tar", ["-xzf", basename(hutchArchive), "-C", extractDir], {
+    cwd: archiveDir,
+    encoding: "utf8",
+  });
   if (extracted.status !== 0) fail(`Hutch を展開できませんでした: ${extracted.stderr}`);
   const binary = findBinary(hutchDir, "hutch");
   if (!binary) fail("展開した Hutch に実行ファイルがありません。");
