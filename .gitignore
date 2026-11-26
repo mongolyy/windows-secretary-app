@@ -1,8 +1,10 @@
 node_modules/
 dist/
 coverage/
-src-tauri/target/
-src-tauri/gen/schemas/
+.hutch/
+.electrobun/
+build/
+artifacts/
 .DS_Store
 *.log
 *.local

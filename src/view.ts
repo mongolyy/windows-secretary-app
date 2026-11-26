@@ -49,17 +49,12 @@ export function updateLiveReadout(root: ParentNode, model: ReadyModel): void {
 }
 
 function renderTitlebar(model: ScreenModel, handlers: ViewHandlers): HTMLElement {
-  const bar = el("header", "titlebar");
-  const brand = el("div", "brand");
-  brand.setAttribute("data-tauri-drag-region", "");
+  const bar = el("header", "titlebar electrobun-webkit-app-region-drag");
+  const brand = el("div", "brand electrobun-webkit-app-region-drag");
   const seal = el("div", "seal", "秘");
-  seal.setAttribute("data-tauri-drag-region", "");
   const titles = el("div");
-  titles.setAttribute("data-tauri-drag-region", "");
   const name = el("h1", undefined, "秘書");
-  name.setAttribute("data-tauri-drag-region", "");
   const status = el("div", "status-line");
-  status.setAttribute("data-tauri-drag-region", "");
   const dot = el("span", `dot ${dotClass(model)}`);
   status.append(dot, document.createTextNode(statusText(model)));
   titles.append(name, status);

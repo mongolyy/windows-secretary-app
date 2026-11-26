@@ -1,0 +1,35 @@
+{
+  "version": "2.0.6",
+  "hutchIndex": {
+    "url": "https://github.com/blackboardsh/electrobun/releases/download/v2.0.6/hutch-artifacts.json",
+    "sha256": "bec5c5f9312fe956bea392bb2d5343a04fb076929ba6097c330d28321dd46c79"
+  },
+  "electrobunIndex": {
+    "url": "https://github.com/blackboardsh/electrobun/releases/download/v2.0.6/electrobun-artifacts.json",
+    "sha256": "9bb0b89635282a3bb3fbd050b4e699097137de6e7e1eedea60479cad5ee8808e"
+  },
+  "hutch": {
+    "linux-x64": {
+      "url": "https://github.com/blackboardsh/electrobun/releases/download/v2.0.6/electrobun-hutch-linux-x64.tar.gz",
+      "sha256": "4aa3c5c7fa24898d8227b087dd393eb2a1463658f0d87e23a72cfe611af83b75",
+      "size": 1238436
+    },
+    "windows-x64": {
+      "url": "https://github.com/blackboardsh/electrobun/releases/download/v2.0.6/electrobun-hutch-windows-x64.tar.gz",
+      "sha256": "5689e643748c6569f0d40e702300555ca08c93790fe69f4327797279b2a75213",
+      "size": 1370139
+    }
+  },
+  "core": {
+    "linux-x64": {
+      "url": "https://github.com/blackboardsh/electrobun/releases/download/v2.0.6/electrobun-core-linux-x64.tar.gz",
+      "sha256": "06afade9cf1cf620a705b5fbbf7c09cd89719f04424453f7f302bcf52d1be1f0",
+      "size": 22941189
+    },
+    "windows-x64": {
+      "url": "https://github.com/blackboardsh/electrobun/releases/download/v2.0.6/electrobun-core-win-x64.tar.gz",
+      "sha256": "2cea374ddea0c1ae52da5cc6e6f5c8b97844a49aad702330fffb0cdd705a772f",
+      "size": 11908918
+    }
+  }
+}

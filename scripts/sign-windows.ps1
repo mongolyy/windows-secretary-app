@@ -1,5 +1,5 @@
-# Authenticode-sign one file. Tauri passes the path as %1.
-# WINDOWS_PFX is the .pfx path. WINDOWS_CERTIFICATE_PASSWORD is its password.
+# ファイルを 1 つ Authenticode 署名する。パスは第 1 引数。
+# WINDOWS_PFX は pfx のパス。WINDOWS_CERTIFICATE_PASSWORD はそのパスワード。
 param(
   [Parameter(Mandatory = $true, Position = 0)]
   [string]$Target

@@ -18,10 +18,7 @@ const FORK_SKIP =
   "github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository";
 const PULL_REQUEST_ALWAYS = "supply-chain-allow: pull-request-always";
 const NPM_REGISTRY = "https://registry.npmjs.org/";
-const CARGO_SOURCES = new Set([
-  "registry+https://github.com/rust-lang/crates.io-index",
-  "sparse+https://index.crates.io/",
-]);
+const RUST_FILES = ["src-tauri", "Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "deny.toml"];
 const NO_CACHE_WORKFLOWS = new Set([".github/workflows/release.yml", ".github/workflows/release-dispatch.yml"]);
 // リリースの prepare だけ git push する。それ以外の checkout は資格情報を残さない。
 const PERSIST_ALLOWS = [
@@ -321,6 +318,10 @@ function usesCache(step) {
   ) {
     return true;
   }
+  // setup-bun は no-cache: true を書かないと、Bun 本体をキャッシュする。
+  if (uses.startsWith("oven-sh/setup-bun@")) {
+    return step.with["no-cache"] !== "true";
+  }
   // setup-node v7 は package-manager-cache の既定が true。false を書かないとキャッシュし得る。
   if (uses.startsWith("actions/setup-node@")) {
     if (explicitNpmCache(step)) return true;
@@ -391,57 +392,72 @@ function checkPackageJson(root, errors) {
   }
 }
 
-function checkPackageLock(root, errors) {
-  const path = join(root, "package-lock.json");
+function checkBunLock(root, errors) {
+  const path = join(root, "bun.lock");
   let lock;
   try {
-    lock = JSON.parse(readFileSync(path, "utf8"));
+    // bun.lock は末尾カンマを許す。JSON として読む前に、閉じ括弧の直前のカンマだけ外す。
+    const text = readFileSync(path, "utf8").replace(/,\s*([}\]])/g, "$1");
+    lock = JSON.parse(text);
   } catch (error) {
-    errors.push(`package-lock.json を読めません: ${error.message}`);
+    errors.push(`bun.lock を読めません: ${error.message}`);
     return;
   }
-  if (lock.lockfileVersion !== 3) {
-    errors.push(`package-lock.json の lockfileVersion が 3 ではありません: ${lock.lockfileVersion}`);
+  if (typeof lock.lockfileVersion !== "number") {
+    errors.push("bun.lock の lockfileVersion がありません。");
   }
   const packages = lock.packages ?? {};
-  let resolvedCount = 0;
-  for (const [name, meta] of Object.entries(packages)) {
-    if (!meta || typeof meta.resolved !== "string") continue;
-    resolvedCount += 1;
-    if (!meta.resolved.startsWith(NPM_REGISTRY)) {
-      errors.push(`package-lock.json の ${name || "(root)"} が registry.npmjs.org 以外です: ${meta.resolved}`);
+  const names = Object.keys(packages);
+  if (names.length === 0) errors.push("bun.lock に packages がありません。");
+  for (const name of names) {
+    const entry = packages[name];
+    if (!Array.isArray(entry) || entry.length < 2) {
+      errors.push(`bun.lock の ${name} の形式が不正です。`);
+      continue;
+    }
+    const source = entry[1];
+    if (typeof source !== "string") {
+      errors.push(`bun.lock の ${name} の取得元が文字列ではありません。`);
+      continue;
+    }
+    // 空文字は公式レジストリ。URL を書くときは registry.npmjs.org だけを許す。
+    if (source !== "" && !source.startsWith(NPM_REGISTRY)) {
+      errors.push(`bun.lock の ${name} が registry.npmjs.org 以外です: ${source}`);
     }
   }
-  if (resolvedCount === 0) errors.push("package-lock.json に resolved がありません。");
 }
 
-function checkCargo(root, errors) {
-  const tomlPath = join(root, "src-tauri", "Cargo.toml");
-  const lockPath = join(root, "src-tauri", "Cargo.lock");
-  let toml;
-  let lock;
+function checkElectrobunPin(root, errors) {
+  let pkg;
   try {
-    toml = readFileSync(tomlPath, "utf8");
-  } catch (error) {
-    errors.push(`src-tauri/Cargo.toml を読めません: ${error.message}`);
-    toml = "";
-  }
-  try {
-    lock = readFileSync(lockPath, "utf8");
-  } catch (error) {
-    errors.push(`src-tauri/Cargo.lock を読めません: ${error.message}`);
+    pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+  } catch {
     return;
   }
-  for (const line of toml.split(/\r?\n/)) {
-    const stripped = stripInlineComment(line).trim();
-    if (/^git\s*=/.test(stripped)) errors.push(`src-tauri/Cargo.toml に git 依存があります: ${stripped}`);
+  const spec = pkg.devDependencies?.electrobun ?? pkg.dependencies?.electrobun;
+  if (spec !== "2.0.6") {
+    errors.push(`electrobun は 2.0.6 に固定してください: ${spec ?? "(なし)"}`);
   }
-  const sources = [...lock.matchAll(/^source = "([^"]+)"/gm)].map((match) => match[1]);
-  if (sources.length === 0) errors.push("src-tauri/Cargo.lock に source がありません。");
-  for (const source of sources) {
-    if (!CARGO_SOURCES.has(source)) {
-      errors.push(`src-tauri/Cargo.lock の source が crates.io 以外です: ${source}`);
+  let hutch = "";
+  try {
+    hutch = readFileSync(join(root, "hutch.config.ts"), "utf8");
+  } catch (error) {
+    errors.push(`hutch.config.ts を読めません: ${error.message}`);
+    return;
+  }
+  if (!hutch.includes('version: "2.0.6"')) {
+    errors.push('hutch.config.ts の electrobun.version は "2.0.6" にしてください。');
+  }
+}
+
+function checkNoRust(root, errors) {
+  for (const name of RUST_FILES) {
+    try {
+      statSync(join(root, name));
+    } catch {
+      continue;
     }
+    errors.push(`Rust のファイルが残っています: ${name}`);
   }
 }
 
@@ -585,8 +601,9 @@ function checkRoot(root) {
   const errors = [];
   checkNpmrc(root, errors);
   checkPackageJson(root, errors);
-  checkPackageLock(root, errors);
-  checkCargo(root, errors);
+  checkBunLock(root, errors);
+  checkElectrobunPin(root, errors);
+  checkNoRust(root, errors);
   const workflows = listWorkflows(root);
   if (workflows.error) errors.push(workflows.error);
   if (!workflows.error && workflows.files.length === 0) errors.push(".github/workflows にワークフローがありません。");

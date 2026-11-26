@@ -1,10 +1,19 @@
 import eslint from "@eslint/js";
 import tseslint from "typescript-eslint";
 
-// フロントエンドの TypeScript だけを見る。Rust と生成物、バージョンスクリプトは対象外。
+// 画面とデスクトップの TypeScript を見る。生成物とバージョンスクリプトは対象外。
 export default tseslint.config(
   {
-    ignores: ["dist/**", "coverage/**", "src-tauri/**", "node_modules/**", "scripts/**"],
+    ignores: [
+      "dist/**",
+      "coverage/**",
+      "node_modules/**",
+      "scripts/**",
+      ".hutch/**",
+      ".electrobun/**",
+      "build/**",
+      "artifacts/**",
+    ],
   },
   eslint.configs.recommended,
   ...tseslint.configs.recommended,

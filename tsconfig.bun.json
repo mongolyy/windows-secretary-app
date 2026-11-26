@@ -1,0 +1,23 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node", "bun"],
+    "strict": false,
+    "noImplicitAny": false,
+    "paths": {
+      "electrobun": ["./src/bun/electrobun-sdk.d.ts"],
+      "electrobun/main": ["./src/bun/electrobun-sdk.d.ts"],
+      "electrobun/view": ["./src/lib/electrobun-view-stub.ts"]
+    }
+  },
+  "include": [
+    "src/bun",
+    "src/desktop",
+    "src/lib/desktop.ts",
+    "src/lib/types.ts",
+    "src/lib/notify.ts",
+    "src/lib/format.ts",
+    "src/lib/time.ts"
+  ],
+  "exclude": ["src/**/*.test.ts"]
+}

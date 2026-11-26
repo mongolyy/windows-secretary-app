@@ -27,20 +27,16 @@ function baseFiles(workflow) {
     "package.json": JSON.stringify({
       name: "fixture",
       version: "0.0.0",
-      dependencies: { "left-pad": "^1.0.0" },
+      devDependencies: { electrobun: "2.0.6", "left-pad": "^1.0.0" },
     }),
-    "package-lock.json": JSON.stringify({
-      lockfileVersion: 3,
+    "hutch.config.ts": 'export default { electrobun: { version: "2.0.6" } };\n',
+    "bun.lock": JSON.stringify({
+      lockfileVersion: 1,
       packages: {
-        "": { version: "0.0.0" },
-        "node_modules/left-pad": {
-          version: "1.0.0",
-          resolved: "https://registry.npmjs.org/left-pad/-/left-pad-1.0.0.tgz",
-        },
+        "left-pad": ["left-pad@1.0.0", "", {}, "sha512-abc"],
+        electrobun: ["electrobun@2.0.6", "", {}, "sha512-def"],
       },
     }),
-    "src-tauri/Cargo.toml": '[package]\nname = "fixture"\nversion = "0.0.0"\n\n[dependencies]\nserde = "1"\n',
-    "src-tauri/Cargo.lock": 'source = "registry+https://github.com/rust-lang/crates.io-index"\n',
     ".github/workflows/ci.yml": workflow,
   };
 }
@@ -268,20 +264,20 @@ jobs:
   assert.match(result.stderr, /キャッシュ/);
 });
 
-test("registry.npmjs.org と crates.io 以外は失敗する", () => {
+test("registry.npmjs.org 以外の bun.lock は失敗する", () => {
   const files = baseFiles(ciWorkflow(goodSteps));
-  const npm = JSON.parse(files["package-lock.json"]);
-  npm.packages["node_modules/left-pad"].resolved = "https://example.invalid/left-pad.tgz";
-  files["package-lock.json"] = JSON.stringify(npm);
+  const lock = JSON.parse(files["bun.lock"]);
+  lock.packages["left-pad"][1] = "https://example.invalid/left-pad.tgz";
+  files["bun.lock"] = JSON.stringify(lock);
   const npmResult = withFixture(files);
   assert.equal(npmResult.status, 1);
   assert.match(npmResult.stderr, /registry\.npmjs\.org/);
 
-  const cargoFiles = baseFiles(ciWorkflow(goodSteps));
-  cargoFiles["src-tauri/Cargo.lock"] = 'source = "git+https://github.com/example/crate.git"\n';
-  const cargoResult = withFixture(cargoFiles);
-  assert.equal(cargoResult.status, 1);
-  assert.match(cargoResult.stderr, /crates\.io/);
+  const rustFiles = baseFiles(ciWorkflow(goodSteps));
+  rustFiles["Cargo.toml"] = '[package]\nname = "fixture"\nversion = "0.0.0"\n';
+  const rustResult = withFixture(rustFiles);
+  assert.equal(rustResult.status, 1);
+  assert.match(rustResult.stderr, /Rust のファイルが残っています/);
 });
 
 test("このリポジトリを検査する", () => {
